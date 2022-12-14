@@ -3,15 +3,14 @@ import logging
 
 
 class Chunk(object):
-    def __init__(self, chash, objHash, codeObjectTuple, sourceChunk, lineno,
+    def __init__(self, chash, objHash, codeObject, sourceChunk, lineno,
                  end_lineno, prevChunk):
 
         self.chash = chash
-        self.codeObjectTuple = codeObjectTuple
+        self.codeObject = codeObject
         self.objHash = objHash
         self.sourceChunk = sourceChunk
-        self.lineno = lineno
-        self.end_lineno = end_lineno
+        self.lineRange = range(lineno, end_lineno + 1)
         self.prevChunk = prevChunk
         self.postState = None
 
@@ -20,63 +19,54 @@ class Chunk(object):
         self.lineno = lineno
         self.end_lineno = end_lineno
 
+    def execute(self, initialNamespace):
+        logging.debug('exec %s', self.getDebugId())
+
+        self.postState = dict(self.prevChunk.postState) if self.prevChunk \
+                                    else initialNamespace
+
+        try:
+            exec(self.codeObject, self.postState)
+        except Exception:
+            import traceback
+            print(traceback.format_exc())
+            return False
+
+        return True
+
     def getDebugId(self):
-        return f'{self.lineno}: {self.sourceChunk.splitlines()[0]}'
+        return f'{self.lineRange.start}: {self.sourceChunk.splitlines()[0]}'
 
 
-class ChunkCache(object):
-    def __init__(self):
+class ExprPrintWrapper(ast.NodeTransformer):
+    """Wraps all Expr-Statements in a call to print()"""
+    def visit_Expr(self, node):
+        new = ast.Expr(
+                value = ast.Call(
+                    func = ast.Name(id='print', ctx=ast.Load()),
+                    args = [node.value], keywords = [])
+                )
+        ast.copy_location(new, node)
+        ast.fix_missing_locations(new)
+        return new
+
+
+class ChunkManager(object):
+    def __init__(self, initialNamespace):
         self.chunkList = []
         self.invalidChunks = []
 
         self.objCache = {}
         self.chunks = {}
 
-    def executeChunk(self, chunk):
-        logging.debug('exec %s', chunk.getDebugId())
-        assert chunk in self.chunks.values()
-
-        chunk.postState = dict(chunk.prevChunk.postState) if chunk.prevChunk \
-                                                          else {}
-
-        try:
-            obj, isExpression = chunk.codeObjectTuple
-            if isExpression:
-                return eval(obj, chunk.postState), True
-            else:
-                return exec(obj, chunk.postState), True
-        except Exception:
-            import traceback
-            print(traceback.format_exc())
-            return None, False
-
-    def executeFirstInvalidChunk(self):
-        if not self.invalidChunks:
-            return None, False
-
-        ret, success =  self.executeChunk(self.invalidChunks[0])
-
-        if success:
-            self.invalidChunks.pop(0)
-
-        return ret, success
-
-    def _cleanUpCaches(self):
-        chunksSet = set(self.chunks.keys())
-        listSet = set(self.chunkList)
-        for chash in chunksSet - listSet:
-            logging.debug("deleted %s", self.chunks[chash].getDebugId())
-
-            assert chash not in self.chunkList
-            del self.chunks[chash]
-
-        objSet = set(c.objHash for c in self.chunks.values())
-        objCacheSet = set(self.objCache.keys())
-        for objHash in objCacheSet - objSet:
-            del self.objCache[objHash]
+        self.initialNamespace = initialNamespace
 
     def update(self, source, filename='<string>'):
         module_ast = ast.parse(source)
+
+        # wrap every expression statement into a print call
+        module_ast = ExprPrintWrapper().visit(module_ast)
+        ast.fix_missing_locations(module_ast)
 
         self.chunkList = []
         self.invalidChunks = []
@@ -117,16 +107,51 @@ class ChunkCache(object):
 
         self._cleanUpCaches()
 
+    def executeFirstInvalidChunk(self):
+        if not self.invalidChunks:
+            return False
+
+        if self.invalidChunks[0].execute(self.initialNamespace):
+            self.invalidChunks.pop(0)
+            return True
+
+        return False
+
+    def executeChunkByLine(self, line):
+        for chunk in self.chunks.values():
+            if line in chunk.lineRange:
+                return chunk.execute(self.initialNamespace)
+
+        return False
+
+    def executeChunksByRange(self, start, end):
+        rangeSet = set(range(start, end+1))
+
+        for chunk in self.chunks.values():
+            if len(rangeSet.intersection(chunk.lineRange)):
+                if not chunk.execute(self.initialNamespace):
+                    return False
+
+        return True
+
     def _updateObjCache(self, node, objHash, filename):
         if objHash in self.objCache.keys():
             return
 
-        # wrapperModule = ast.Module(body=[node], type_ignores=[])
-        # self.objCache[objHash] = compile(wrapperModule, filename, 'exec')
-        if issubclass(type(node), ast.Expr):
-            expressionWrapper = ast.Expression(node.value)
-            self.objCache[objHash] = (compile(expressionWrapper, filename, 'eval'), True)
-        else:
-            wrapperModule = ast.Module(body=[node], type_ignores=[])
-            self.objCache[objHash] = (compile(wrapperModule, filename, 'exec'), False)
+        wrapperModule = ast.Module(body=[node], type_ignores=[])
+        self.objCache[objHash] = compile(wrapperModule, filename, 'exec')
+
+    def _cleanUpCaches(self):
+        chunksSet = set(self.chunks.keys())
+        listSet = set(self.chunkList)
+        for chash in chunksSet - listSet:
+            logging.debug("deleted %s", self.chunks[chash].getDebugId())
+
+            assert chash not in self.chunkList
+            del self.chunks[chash]
+
+        objSet = set(c.objHash for c in self.chunks.values())
+        objCacheSet = set(self.objCache.keys())
+        for objHash in objCacheSet - objSet:
+            del self.objCache[objHash]
 

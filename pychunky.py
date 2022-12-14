@@ -1,19 +1,24 @@
-from .chunkCache import ChunkCache
+from .chunkCache import ChunkManager
 
 
-chunkCache = ChunkCache()
+def myPrint(*args, **kwargs):
+    if not args:
+        return
+    if args[0] is None:
+        return
+
+    print(*args, **kwargs)
+
+chunkManager = ChunkManager({'print': myPrint})
 
 
 def smartExecute(source):
-    chunkCache.update(source, '<none>')
+    chunkManager.update(source, '<none>')
 
-    while True:
-        ret, success = chunkCache.executeFirstInvalidChunk()
-        if not success:
-            break
+    while chunkManager.executeFirstInvalidChunk():
+        pass
 
-        if ret:
-            print(ret)
+    chunkManager.executeChunksByRange(27, 29)
 
 def smartExecuteFile(filename):
     with open(filename, 'r') as w:
