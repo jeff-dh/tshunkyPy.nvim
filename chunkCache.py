@@ -2,6 +2,12 @@ import ast
 import logging
 
 
+class DummyInitialChunk(object):
+    def __init__(self, initialNamespace):
+        self.postState = initialNamespace
+        self.chash = 0
+        self.valid = True
+
 class Chunk(object):
     def __init__(self, chash, objHash, codeObject, sourceChunk, lineno,
                  end_lineno, prevChunk):
@@ -13,24 +19,31 @@ class Chunk(object):
         self.lineRange = range(lineno, end_lineno + 1)
         self.prevChunk = prevChunk
         self.postState = None
+        self.valid = False
 
     def update(self, sourceChunk, lineno, end_lineno):
         self.sourceChunk = sourceChunk
         self.lineno = lineno
         self.end_lineno = end_lineno
 
-    def execute(self, initialNamespace):
+    def execute(self):
         logging.debug('exec %s', self.getDebugId())
 
-        self.postState = dict(self.prevChunk.postState) if self.prevChunk \
-                                    else initialNamespace
+        assert self.prevChunk
+        # assert self.prevChunk.valid
+        self.postState = dict(self.prevChunk.postState)
 
         try:
             exec(self.codeObject, self.postState)
         except Exception:
             import traceback
             print(traceback.format_exc())
+            if not self.prevChunk.valid:
+                print("At least one previous chunks is not valid..... is " +
+                      "that maybe the reason for this exception?")
             return False
+
+        self.valid = True
 
         return True
 
@@ -54,31 +67,30 @@ class ExprPrintWrapper(ast.NodeTransformer):
 class ChunkManager(object):
     def __init__(self, initialNamespace):
         self.chunkList = []
-        self.invalidChunks = []
 
         self.objCache = {}
         self.chunks = {}
 
-        self.initialNamespace = initialNamespace
+        self.dummyInitialChunk = DummyInitialChunk(initialNamespace)
 
     def update(self, source, filename='<string>'):
         module_ast = ast.parse(source)
 
         # wrap every expression statement into a print call
         module_ast = ExprPrintWrapper().visit(module_ast)
-        ast.fix_missing_locations(module_ast)
 
         self.chunkList = []
-        self.invalidChunks = []
 
-        prevChunk = None
+        prevChunk = self.dummyInitialChunk
+
         for n in module_ast.body:
             # calculate (code) object hash
             sourceChunk = ast.get_source_segment(source, n)
+            assert sourceChunk
             objHash = sourceChunk.__hash__()
 
             # calculate chunk hash
-            prevHash = prevChunk.chash if prevChunk else 0
+            prevHash = prevChunk.chash
             chash = (objHash + prevHash).__hash__()
             self.chunkList.append(chash)
 
@@ -98,41 +110,61 @@ class ChunkManager(object):
                             n.lineno, n.end_lineno, prevChunk)
                 self.chunks[chash] = chunk
 
-                #append to invalid chunks
-                self.invalidChunks.append(chunk)
-
                 logging.debug('changed %s', self.chunks[chash].getDebugId())
 
             prevChunk = chunk
 
         self._cleanUpCaches()
 
+    def executeAllChunks(self):
+        for chunk in self._getOrderedChunks():
+            if not chunk.execute():
+                return False
+
+        return True
+
+    def executeAllInvalidChunks(self):
+        for chunk in self._getOrderedChunks():
+            if not chunk.valid:
+                if not chunk.execute():
+                    return False
+        return True
+
     def executeFirstInvalidChunk(self):
-        if not self.invalidChunks:
-            return False
-
-        if self.invalidChunks[0].execute(self.initialNamespace):
-            self.invalidChunks.pop(0)
-            return True
-
-        return False
+        for chunk in self._getOrderedChunks():
+            if not chunk.valid:
+                if not chunk.execute():
+                    return False
+                return True
+        return True
 
     def executeChunkByLine(self, line):
-        for chunk in self.chunks.values():
+        for chunk in self._getOrderedChunks():
             if line in chunk.lineRange:
-                return chunk.execute(self.initialNamespace)
+                return chunk.execute()
 
         return False
 
     def executeChunksByRange(self, start, end):
         rangeSet = set(range(start, end+1))
 
-        for chunk in self.chunks.values():
+        for chunk in self._getOrderedChunks():
             if len(rangeSet.intersection(chunk.lineRange)):
-                if not chunk.execute(self.initialNamespace):
+                if not chunk.execute():
                     return False
 
         return True
+
+    def getInvalidChunkRanges(self):
+        ranges = []
+        for chunk in self._getOrderedChunks():
+            if not chunk.valid:
+                ranges.append(chunk.lineRange)
+
+        return ranges
+
+    def _getOrderedChunks(self):
+        return [self.chunks[chash] for chash in self.chunkList]
 
     def _updateObjCache(self, node, objHash, filename):
         if objHash in self.objCache.keys():

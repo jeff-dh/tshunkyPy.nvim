@@ -15,8 +15,7 @@ chunkManager = ChunkManager({'print': myPrint})
 def smartExecute(source):
     chunkManager.update(source, '<none>')
 
-    while chunkManager.executeFirstInvalidChunk():
-        pass
+    chunkManager.executeAllInvalidChunks()
 
     chunkManager.executeChunksByRange(27, 29)
 
