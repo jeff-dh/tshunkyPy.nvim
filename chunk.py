@@ -1,11 +1,7 @@
+import io
+import sys
 import logging
 
-
-class DummyInitialChunk(object):
-    def __init__(self, initialNamespace):
-        self.postState = initialNamespace
-        self.chash = 0
-        self.valid = True
 
 class Chunk(object):
     def __init__(self, chash, objHash, codeObject, sourceChunk, lineno,
@@ -17,35 +13,47 @@ class Chunk(object):
         self.sourceChunk = sourceChunk
         self.lineRange = range(lineno, end_lineno + 1)
         self.prevChunk = prevChunk
+
         self.postState = None
         self.valid = False
+        self.output = None
 
     def update(self, sourceChunk, lineno, end_lineno):
         self.sourceChunk = sourceChunk
-        self.lineno = lineno
-        self.end_lineno = end_lineno
+        self.lineRange = range(lineno, end_lineno+1)
 
     def execute(self):
         logging.debug('exec %s', self.getDebugId())
 
         assert self.prevChunk
-        # assert self.prevChunk.valid
+        assert self.prevChunk.valid
         self.postState = dict(self.prevChunk.postState)
+
+        stdoutBuffer = io.StringIO()
+        prev_stdout, sys.stdout = sys.stdout, stdoutBuffer
+        self.postState['sys'] = sys
+
+        self.output = None
 
         try:
             exec(self.codeObject, self.postState)
-        except Exception:
-            import traceback
-            print(traceback.format_exc())
-            if not self.prevChunk.valid:
-                print("At least one previous chunks is not valid..... is " +
-                      "that maybe the reason for this exception?")
-            return False
+        except Exception as e:
+            self.output = repr(e) + stdoutBuffer.getvalue().strip()
+            self.valid = False
+        else:
+            self.output = stdoutBuffer.getvalue().strip()
+            self.valid = True
 
-        self.valid = True
+        sys.stdout = prev_stdout
 
-        return True
+        return self.valid
 
     def getDebugId(self):
         return f'{self.lineRange.start}: {self.sourceChunk.splitlines()[0]}'
+
+class DummyInitialChunk(Chunk):
+    def __init__(self, initialNamespace):
+        super().__init__(0, 0, None, None, 0, 0, None)
+        self.postState = initialNamespace
+        self.valid = True
 
