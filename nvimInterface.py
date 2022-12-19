@@ -2,6 +2,12 @@ from .chunkManager import ChunkManager
 
 import pynvim
 
+# fix pynvim issue
+import logging
+for h in logging.root.handlers:
+    if isinstance(h, pynvim.NullHandler):
+        logging.root.removeHandler(h)
+
 
 gl_nvim = None
 def debug(s):
@@ -79,8 +85,16 @@ class NvimInterface:
     @pynvim.command('TshunkyPyCursorMoved', sync=synced)
     def cursorMoved(self):
         self.nvim.api.clear_autocmds({'group': 'tshunkyPyAutoCursorMovedCmd'})
+        assert self.popupWindow != None
         if self.popupWindow and self.popupWindow.valid:
-            self.popupWindow.api.close(True)
+            # hmmm can't figure out why this throws an exception when the
+            # popup was focused and the cursor leaves the popup
+            # it throws an winid invalid exception....?!?!
+            # anyway it closes the window
+            try:
+                self.popupWindow.api.close(True)
+            except pynvim.api.common.NvimError: # type: ignore
+                pass
 
     @pynvim.command('TshunkyPyCursorHold', sync=synced)
     def cursorHold(self):
@@ -204,7 +218,7 @@ class NvimInterface:
 
         try:
             self.nvim.funcs.sign_placelist(signList)
-        except pynvim.api.common.NvimError:
+        except pynvim.api.common.NvimError: # type: ignore
             pass
 
     def _refreshChunkOutputs(self):
@@ -218,11 +232,12 @@ class NvimInterface:
             vtext = ['>> ' + output.replace('\n', '\\n'), hl]
 
             try:
+                assert pos
                 buf.api.set_extmark(self.vtext_ns, pos-1, 0,
                                             {'virt_text': [vtext],
                                             'hl_mode': 'combine',
                                             'priority': 200 if not isError else 201})
-            except pynvim.api.common.NvimError:
+            except pynvim.api.common.NvimError: # type: ignore
                 pass
 
 

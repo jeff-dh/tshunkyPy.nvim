@@ -7,29 +7,23 @@ logging.basicConfig(format=logFormat, level=logging.DEBUG)
 
 from ..chunkManager import ChunkManager
 
-
-def myPrint(*args, **kwargs):
-    if not args:
-        return
-    if args[0] is None:
-        return
-
-    print(*args, **kwargs)
-
-chunkManager = ChunkManager({'print': myPrint})
+chunkManager = ChunkManager()
 
 def executeFile(filename):
     with open(filename, 'r') as w:
         source = w.read()
 
         chunkManager.update(source, filename)
-
         chunkManager.executeAllInvalidChunks()
+
+        for lineno, msg, _ in chunkManager.getOutput():
+            print(f'{Path(filename).name}:{lineno} {msg}')
+
 
 
 if __name__ == '__main__':
     while True:
-        print('---------------------------')
+        print('--------')
         file = Path(__file__).parent / 'testSource.py'
         executeFile(file.as_posix())
         import time

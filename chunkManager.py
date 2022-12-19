@@ -22,8 +22,6 @@ class ChunkManager(object):
         self.objCache = {}
         self.chunks = {}
 
-        initialNamespace = {'print': patchedPrint}
-        self.dummyInitialChunk = DummyInitialChunk(initialNamespace)
         self.error = None
 
 
@@ -53,7 +51,7 @@ class ChunkManager(object):
 
         #reset chunkList
         self.chunkList = []
-        prevChunk = self.dummyInitialChunk
+        prevChunk = DummyInitialChunk({'print': patchedPrint})
 
         for n in module_ast.body:
             # calculate (code) object hash
@@ -62,8 +60,7 @@ class ChunkManager(object):
             objHash = sourceChunk.__hash__()
 
             # calculate chunk hash
-            prevHash = prevChunk.chash
-            chash = (objHash + prevHash).__hash__()
+            chash = (objHash + prevChunk.chash).__hash__()
             self.chunkList.append(chash)
 
             # compile code object
