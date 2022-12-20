@@ -6,7 +6,7 @@ class ExprPrintWrapper(ast.NodeTransformer):
     def visit_Expr(self, node):
         new = ast.Expr(
                 value = ast.Call(
-                    func = ast.Name(id='print', ctx=ast.Load()),
+                    func = ast.Name(id='printExpr', ctx=ast.Load()),
                     args = [node.value], keywords = [])
                 )
         ast.copy_location(new, node)

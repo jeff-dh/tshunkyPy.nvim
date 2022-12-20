@@ -2,6 +2,8 @@ import sys
 import logging
 import dill
 import types
+import inspect
+import traceback
 
 class StateWrapper(dict):
     def __init__(self):
@@ -38,7 +40,8 @@ class Chunk(object):
                                                    else StateWrapper()
 
         self.valid = False
-        self.output = None
+        self.stdout = None
+        self.vtexts = []
 
     def update(self, sourceChunk, lineno, end_lineno):
         self.sourceChunk = sourceChunk
@@ -62,6 +65,24 @@ class Chunk(object):
             if isinstance(v, types.FunctionType):
                 self.namespace[k] = v
 
+        # inject locally wrapped print and printExpr functions
+        printOutputs = []
+        def printWrapper(*args, **kwargs):
+            caller = inspect.getframeinfo(inspect.stack()[1][0])
+            printOutputs.append((caller.lineno, repr(*args)))
+            print(*args, **kwargs)
+
+        def printExprWrapper(x):
+            if x == None:
+                return
+            caller = inspect.getframeinfo(inspect.stack()[1][0])
+            if not isinstance(x, str):
+                x = repr(x)
+            printOutputs.append((caller.lineno, x))
+
+        self.namespace['print'] = printWrapper
+        self.namespace['printExpr'] = printExprWrapper
+
         # set our local namespace as "global namespace". This needs to be
         # wrapped, because all function objects contain a reference to the
         # global namespace (at chunk execution time! -> func.__globals__).
@@ -71,17 +92,22 @@ class Chunk(object):
 
         # and execute the chunk and capture stdout
         with dill.temp.capture() as stdoutBuffer:
-            errorMsg = ''
+            error = None
             try:
                 exec(self.codeObject, self.stateWrapper)
             except Exception:
-                import traceback
-                errorMsg = traceback.format_exc()
+                _, _, tb = sys.exc_info()
+                error = (traceback.extract_tb(tb)[-1][1],
+                         traceback.format_exc())
                 self.valid = False
             else:
                 self.valid = True
 
-            self.output = errorMsg + stdoutBuffer.getvalue().strip()
+        self.stdout = stdoutBuffer.getvalue().strip()
+        self.vtexts = printOutputs[:]
+        if error:
+            self.stdout = self.stdout + error[1]
+            self.vtexts.insert(0, error)
 
         # unload modules that are not imported in the outside world
         # (outside of the exec envinronment) this is necessary to

@@ -2,26 +2,23 @@ from .chunkManager import ChunkManager
 
 import pynvim
 
-# fix pynvim issue
-import logging
-for h in logging.root.handlers:
-    if isinstance(h, pynvim.NullHandler):
-        logging.root.removeHandler(h)
+
+def wrapLines(lines, width):
+    import textwrap
+    newLines = []
+    for l in lines:
+        newLines.extend(textwrap.wrap(l, width-1))
+
+    return newLines
 
 
-gl_nvim = None
-def debug(s):
-    assert gl_nvim is not None
-    s = repr(s).replace('\"', '\'')
-    gl_nvim.api.command(f'echo "{s}"')
-
-
-@pynvim.plugin
 class NvimInterface:
-    synced = False
 
     def __init__(self, nvim: pynvim.Nvim):
         self.nvim = nvim
+
+        buf = self.nvim.current.buffer
+        self.ID = str(buf.handle)
 
         self.chunkManager = ChunkManager()
         self.liveMode = False
@@ -29,14 +26,17 @@ class NvimInterface:
         self.popupBuffer = None
         self.popupWindow = None
 
-        global gl_nvim
-        gl_nvim = nvim
-
         self.setKeymaps()
         self.initSignsAndVText()
 
-        buf = self.nvim.current.buffer
         self.nvim.api.command(f'lua vim.diagnostic.disable({buf.handle})')
+
+    def echo(self, x):
+        if not isinstance(x, str):
+            x = repr(x)
+        x = x.replace('\"', '\'')
+        self.nvim.api.command(f'echo "{x}"')
+
 
     def initSignsAndVText(self):
         self.nvim.api.command('highlight tshunkyPyInvalidhl guibg=red')
@@ -52,7 +52,9 @@ class NvimInterface:
         self.nvim.api.command('highlight tshunkyPyVErrorhl gui=bold guifg=#c84848')
         self.vtext_ns = self.nvim.api.create_namespace("tshunkyPyVirtualText")
 
-    def autocmd(self, events, cmd, group='tshunkyPyAutoCmds'):
+    def autocmd(self, events, cmd, group=None):
+        if group == None:
+            group = 'tshunkyPyAutoCmds' + self.ID
         buf = self.nvim.current.buffer
         self.nvim.api.create_autocmd(events, {'group': group,
                                               'buffer': buf.handle,
@@ -67,24 +69,37 @@ class NvimInterface:
         keymap('n', '<M-a>', ':TshunkyPyRunAll<CR>', opts)
         keymap('n', '<M-i>', ':TshunkyPyRunAllInvalid<CR>', opts)
         keymap('n', '<M-f>', ':TshunkyPyRunFirstInvalid<CR>', opts)
-        keymap('v', '<M-r>', ':TshunkyPyRunRange<CR>', opts)
-        keymap('n', '<M-l>', ':TshunkyPyRunLine<CR>', opts)
         keymap('n', '<M-x>', ':TshunkyPyLive<CR>', opts)
 
-        self.nvim.api.create_augroup("tshunkyPyAutoCmds", {'clear': True})
-        self.nvim.api.create_augroup("tshunkyPyAutoLiveCmd", {'clear': True})
-        self.nvim.api.create_augroup("tshunkyPyAutoCursorMovedCmd", {'clear': True})
-        self.autocmd(['CursorHold', 'CursorHoldI'], 'TshunkyPyCursorHold')
+        keymap('i', '<M-u>', '<ESC>:TshunkyPyUpdate<CR>li', opts)
+        keymap('i', '<M-a>', '<ESC>:TshunkyPyRunAll<CR>li', opts)
+        keymap('i', '<M-i>', '<ESC>:TshunkyPyRunAllInvalid<CR>li', opts)
+        keymap('i', '<M-f>', '<ESC>:TshunkyPyRunFirstInvalid<CR>li', opts)
+        keymap('i', '<M-x>', '<ESC>:TshunkyPyLive<CR>li', opts)
 
-    @pynvim.command('TshunkyPy', sync=synced)
-    def dummyInit(self):
-        # to be able to init tshunkyPy and let it initialize it's key mappings
-        # and auto commands
-        pass
+        self.nvim.api.create_augroup("tshunkyPyAutoCmds" + self.ID, {'clear': True})
+        self.nvim.api.create_augroup("tshunkyPyAutoLiveCmd" + self.ID, {'clear': True})
+        self.nvim.api.create_augroup("tshunkyPyAutoCursorMovedCmd" + self.ID, {'clear': True})
+        self.autocmd(['CursorHold', 'CursorHoldI'],
+                     'call TshunkyPyCursorHoldCallback()')
 
-    @pynvim.command('TshunkyPyCursorMoved', sync=synced)
+        self.updateAutoCommands()
+
+    def quit(self):
+        buf = self.nvim.current.buffer
+
+        buf.api.clear_namespace(self.vtext_ns, 0, -1)
+
+        self.nvim.funcs.sign_unplace('tshunkyPyInvalidSignsGroup' + buf.name)
+
+        self.nvim.api.clear_autocmds({'group': 'tshunkyPyAutoCursorMovedCmd' + self.ID})
+        self.nvim.api.clear_autocmds({'group': 'tshunkyPyAutoCmds' + self.ID})
+        self.nvim.api.clear_autocmds({'group': 'tshunkyPyAutoLiveCmd' + self.ID})
+
+        self.nvim.api.command(f'lua vim.diagnostic.enable({buf.handle})')
+
     def cursorMoved(self):
-        self.nvim.api.clear_autocmds({'group': 'tshunkyPyAutoCursorMovedCmd'})
+        self.nvim.api.clear_autocmds({'group': 'tshunkyPyAutoCursorMovedCmd' + self.ID})
         assert self.popupWindow != None
         if self.popupWindow and self.popupWindow.valid:
             # hmmm can't figure out why this throws an exception when the
@@ -96,17 +111,20 @@ class NvimInterface:
             except pynvim.api.common.NvimError: # type: ignore
                 pass
 
-    @pynvim.command('TshunkyPyCursorHold', sync=synced)
     def cursorHold(self):
+        popupWidth = 80
+
         lineno, col = self.nvim.funcs.getpos('.')[1:-1]
         chunk = self.chunkManager._getChunkByLine(lineno)
 
-        if not chunk or not chunk.output:
+        if not chunk or not chunk.stdout:
             return
 
-        lines = chunk.output.strip().split('\n')
+        lines = chunk.stdout.strip().split('\n')
         if not len(lines) > 1:
             return
+
+        lines = wrapLines(lines, popupWidth-1)
 
         # create buffer
         if not self.popupBuffer or not self.popupBuffer.valid:
@@ -119,15 +137,9 @@ class NvimInterface:
         self.popupBuffer[:] = lines
         self.popupBuffer.api.set_option('modifiable', False)
 
-        # make it cyan! Is there a better / faster way to paint the whole
-        # buffer cyan?
-        ns = self.nvim.api.create_namespace('tshunkyPyPopupHlns')
-        for i in range(0, len(lines)):
-            self.popupBuffer.api.add_highlight(ns, 'tshunkyPyVTexthl', i, 0, -1)
-
         #window opts
         opts = {'relative': 'cursor',
-                'width': 50,
+                'width': popupWidth,
                 'height': len(lines),
                 'col': len(self.nvim.current.line) + 5 - col,
                 'style': 'minimal',
@@ -136,71 +148,73 @@ class NvimInterface:
 
         #create / update window
         if not self.popupWindow or not self.popupWindow.valid:
+            self.autocmd(['CursorMoved', 'CursorMovedI'],
+                         'call TshunkyPyCursorMovedCallback()',
+                         'tshunkyPyAutoCursorMovedCmd' + self.ID)
             self.popupWindow = self.nvim.api.open_win(self.popupBuffer, False, opts)
-            self.autocmd(['CursorMoved', 'CursorMovedI'], 'TshunkyPyCursorMoved',
-                            'tshunkyPyAutoCursorMovedCmd')
         else:
             self.popupWindow.api.set_config(opts)
 
-    @pynvim.command('TshunkyPyLive', sync=synced)
+    def updateAutoCommands(self):
+        if self.liveMode:
+            self.echo('Enabled tshunkyPy live mode')
+            self.nvim.api.clear_autocmds({'group': 'tshunkyPyAutoLiveCmd' + self.ID})
+            self.autocmd(['CursorHold', 'CursorHoldI'],
+                         'call TshunkyPyLiveCallback()',
+                         'tshunkyPyAutoLiveCmd' + self.ID)
+            self.runAllInvalid()
+        else:
+            self.echo('Disabled tshunkyPy live mode')
+            self.nvim.api.clear_autocmds({'group': 'tshunkyPyAutoLiveCmd' + self.ID})
+            self.autocmd(['CursorHold', 'CursorHoldI'],
+                         'TshunkyPyUpdate',
+                         'tshunkyPyAutoLiveCmd' + self.ID)
+
     def live(self):
         self.liveMode =  not self.liveMode
-        if self.liveMode:
-            self.autocmd(['CursorHold', 'CursorHoldI'],
-                         'TshunkyPyUpdateAndRunInvalids',
-                         'tshunkyPyAutoLiveCmd')
-        else:
-            self.nvim.api.clear_autocmds({'group': 'tshunkyPyAutoLiveCmd'})
+        self.updateAutoCommands()
 
-    @pynvim.command('TshunkyPyUpdateAndRunInvalids', sync=False)
-    def updateAndRunInvalids(self):
+    def updateLive(self):
         if self.update():
             self.runAllInvalid()
 
-    @pynvim.command('TshunkyPyUpdate', sync=synced)
     def update(self):
         buf = self.nvim.current.buffer
         source = '\n'.join(buf[:])
 
-        res =  self.chunkManager.update(source, buf.name)
-        if res != 0:
+        # returns -1 on SyntaxError, False if nothing changed and
+        # True if the source changed
+        res = self.chunkManager.update(source, buf.name)
+        if res:
+            # either syntax error or updated source
             self._refresh()
-            return res == 1
+            # updated source?
+            return res == True
 
+        # nothing changed
         return False
 
-    @pynvim.command('TshunkyPyRunAll', sync=synced)
     def runAll(self):
+        self.update()
         self.chunkManager.executeAllChunks()
         self._refresh()
 
-    @pynvim.command('TshunkyPyRunAllInvalid', sync=synced)
     def runAllInvalid(self):
+        self.update()
         while self.chunkManager.executeFirstInvalidChunk():
             self._refresh()
         self._refresh()
 
-    @pynvim.command('TshunkyPyRunFirstInvalid', sync=synced)
     def runFirstInvalid(self):
+        self.update()
         self.chunkManager.executeFirstInvalidChunk()
-        self._refresh()
-
-    @pynvim.command('TshunkyPyRunLine', sync=synced)
-    def runByLine(self):
-        lineno = self.nvim.funcs.getpos('.')[1]
-        self.chunkManager.executeChunkByLine(lineno)
-        self._refresh()
-
-    @pynvim.command('TshunkyPyRunRange', range='', sync=synced)
-    def runByRange(self, selectedRange):
-        self.chunkManager.executeChunksByRange(*selectedRange)
         self._refresh()
 
     def _refreshInvalidRanges(self):
         buf = self.nvim.current.buffer
 
         # handle invaid ranges
-        signGroup = 'tshunky' + buf.name
+        signGroup = 'tshunkyPyInvalidSignsGroup' + buf.name
         self.nvim.funcs.sign_unplace(signGroup)
         signList = []
         for r in self.chunkManager.getInvalidChunkRanges():
@@ -226,17 +240,13 @@ class NvimInterface:
 
         # handle chunk outputs
         buf.api.clear_namespace(self.vtext_ns, 0, -1)
-        for pos, output, isError in self.chunkManager.getOutput():
-
-            hl = 'tshunkyPyVTexthl' if not isError else 'tshunkyPyVErrorhl'
-            vtext = ['>> ' + output.replace('\n', '\\n'), hl]
-
+        for lineno, text in self.chunkManager.getVTexts():
+            vtext = ['>> ' + text.replace('\n', '\\n'), 'tshunkyPyVErrorhl']
             try:
-                assert pos
-                buf.api.set_extmark(self.vtext_ns, pos-1, 0,
+                buf.api.set_extmark(self.vtext_ns, lineno-1, 0,
                                             {'virt_text': [vtext],
                                             'hl_mode': 'combine',
-                                            'priority': 200 if not isError else 201})
+                                            'priority': 200})
             except pynvim.api.common.NvimError: # type: ignore
                 pass
 

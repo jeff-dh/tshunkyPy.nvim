@@ -1,19 +1,9 @@
 import ast
 import logging
-import pprint
 
 from .utils import ExprPrintWrapper
 from .chunk import Chunk, DummyInitialChunk
 
-
-def patchedPrint(*args, **kwargs):
-    if args and args[0] is None:
-        return
-    else:
-        if not isinstance(args[0], str):
-            pprint.pprint(*args, **kwargs, indent=4)
-        else:
-            print(*args, **kwargs)
 
 class ChunkManager(object):
     def __init__(self):
@@ -24,7 +14,6 @@ class ChunkManager(object):
 
         self.error = None
 
-
     def _parseSource(self, source):
         try:
             module_ast = ast.parse(source)
@@ -32,8 +21,12 @@ class ChunkManager(object):
             self.error = e
             errorChunk = self._getChunkByLine(e.lineno)
             if errorChunk:
-                errorChunk.valid = False
-                errorChunk.output = ''
+                idx = self.chunkList.index(errorChunk.chash)
+                for chash in self.chunkList[idx:]:
+                    c = self.chunks[chash]
+                    c.valid = False
+                    c.stdout = ''
+                    c.vtexts = []
             return None
 
         # wrap every expression statement into a print call
@@ -51,13 +44,13 @@ class ChunkManager(object):
 
         #reset chunkList
         self.chunkList = []
-        prevChunk = DummyInitialChunk({'print': patchedPrint})
+        prevChunk = DummyInitialChunk({})
 
         for n in module_ast.body:
             # calculate (code) object hash
             sourceChunk = ast.get_source_segment(source, n)
             assert sourceChunk
-            objHash = sourceChunk.__hash__()
+            objHash = (str(len(self.chunkList)) + sourceChunk).__hash__()
 
             # calculate chunk hash
             chash = (objHash + prevChunk.chash).__hash__()
@@ -90,6 +83,8 @@ class ChunkManager(object):
 
 
     def executeAllChunks(self):
+        if self.error:
+            return False
         for chunk in self._getOrderedChunks():
             if not chunk.execute():
                 return False
@@ -97,6 +92,8 @@ class ChunkManager(object):
         return True
 
     def executeAllInvalidChunks(self):
+        if self.error:
+            return False
         for chunk in self._getOrderedChunks():
             if not chunk.valid:
                 if not chunk.execute():
@@ -104,28 +101,13 @@ class ChunkManager(object):
         return True
 
     def executeFirstInvalidChunk(self):
+        if self.error:
+            return False
         for chunk in self._getOrderedChunks():
             if not chunk.valid:
                 return chunk.execute()
 
         return False
-
-    def executeChunkByLine(self, line):
-        chunk = self._getChunkByLine(line)
-        if chunk:
-            return chunk.execute()
-
-        return False
-
-    def executeChunksByRange(self, start, end):
-        rangeSet = set(range(start, end+1))
-
-        for chunk in self._getOrderedChunks():
-            if len(rangeSet.intersection(chunk.lineRange)):
-                if not chunk.execute():
-                    return False
-
-        return True
 
     def getInvalidChunkRanges(self):
         ranges = []
@@ -140,14 +122,17 @@ class ChunkManager(object):
 
         return ranges
 
-    def getOutput(self):
-        outputList = [(c.lineRange.stop-1, c.output, False)
-                      for c in self.chunks.values() if c.output]
+    def getVTexts(self):
+        vtexts = []
 
-        errorList = [(self.error.lineno, repr(self.error), True)]  \
-                        if self.error else []
+        for chash in self.chunkList:
+            c = self.chunks[chash]
+            vtexts.extend(c.vtexts)
 
-        return  outputList + errorList
+        if self.error:
+            vtexts.append((self.error.lineno, repr(self.error)))
+
+        return  vtexts
 
     def _getOrderedChunks(self):
         return [self.chunks[chash] for chash in self.chunkList]
