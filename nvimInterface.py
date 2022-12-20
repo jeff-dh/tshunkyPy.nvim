@@ -41,8 +41,7 @@ class NvimInterface:
         self.nvim.funcs.sign_define('tshunkyPyInvalidSign', invalidSign)
         self.nvim.funcs.sign_define('tshunkyPyInvalidSign2', invalidSign2)
 
-        self.nvim.api.command('highlight tshunkyPyVTexthl gui=bold guifg=#22AADD')
-        self.nvim.api.command('highlight tshunkyPyVErrorhl gui=bold guifg=#c84848')
+        self.nvim.api.command('highlight tshunkyPyVTexthl gui=bold guifg=#c84848')
         self.vtext_ns = self.nvim.api.create_namespace("tshunkyPyVirtualText")
 
     def autocmd(self, events, cmd, group=None):
@@ -72,9 +71,13 @@ class NvimInterface:
         keymap('i', '<M-x>', '<ESC>:TshunkyPyLive<CR>li', opts)
         keymap('i', '<M-o>', '<ESC>:TshunkyPyShowStdout<CR>li', opts)
 
-        self.nvim.api.create_augroup("tshunkyPyAutoCmds" + self.ID, {'clear': True})
-        self.nvim.api.create_augroup("tshunkyPyAutoLiveCmd" + self.ID, {'clear': True})
-        self.nvim.api.create_augroup("tshunkyPyAutoCursorMovedCmd" + self.ID, {'clear': True})
+        self.nvim.api.create_augroup("tshunkyPyAutoCmds" + self.ID,
+                                     {'clear': True})
+        self.nvim.api.create_augroup("tshunkyPyAutoLiveCmd" + self.ID,
+                                     {'clear': True})
+        self.nvim.api.create_augroup("tshunkyPyAutoCursorMovedCmd" + self.ID,
+                                     {'clear': True})
+
         self.autocmd(['CursorHold', 'CursorHoldI'],
                      'call TshunkyPyCursorHoldCallback()')
 
@@ -87,9 +90,12 @@ class NvimInterface:
 
         self.nvim.funcs.sign_unplace('tshunkyPyInvalidSignsGroup' + buf.name)
 
-        self.nvim.api.clear_autocmds({'group': 'tshunkyPyAutoCursorMovedCmd' + self.ID})
-        self.nvim.api.clear_autocmds({'group': 'tshunkyPyAutoCmds' + self.ID})
-        self.nvim.api.clear_autocmds({'group': 'tshunkyPyAutoLiveCmd' + self.ID})
+        self.nvim.api.clear_autocmds(
+                {'group': 'tshunkyPyAutoCursorMovedCmd' + self.ID})
+        self.nvim.api.clear_autocmds(
+                {'group': 'tshunkyPyAutoCmds' + self.ID})
+        self.nvim.api.clear_autocmds(
+                {'group': 'tshunkyPyAutoLiveCmd' + self.ID})
 
         self.nvim.api.command(f'lua vim.diagnostic.enable({buf.handle})')
 
@@ -102,7 +108,8 @@ class NvimInterface:
             self.popupBuffer = None
 
     def cursorMoved(self):
-        self.nvim.api.clear_autocmds({'group': 'tshunkyPyAutoCursorMovedCmd' + self.ID})
+        self.nvim.api.clear_autocmds(
+                {'group': 'tshunkyPyAutoCursorMovedCmd' + self.ID})
         assert self.popupWindow != None
         if self.popupWindow and self.popupWindow.valid:
             # hmmm can't figure out why this throws an exception when the
@@ -154,21 +161,29 @@ class NvimInterface:
             self.autocmd(['CursorMoved', 'CursorMovedI'],
                          'call TshunkyPyCursorMovedCallback()',
                          'tshunkyPyAutoCursorMovedCmd' + self.ID)
-            self.popupWindow = self.nvim.api.open_win(self.popupBuffer, False, opts)
+            self.popupWindow = self.nvim.api.open_win(self.popupBuffer,
+                                                      False, opts)
         else:
             self.popupWindow.api.set_config(opts)
 
     def updateAutoCommands(self):
         if self.liveMode:
             self.echo('Enabled tshunkyPy live mode')
-            self.nvim.api.clear_autocmds({'group': 'tshunkyPyAutoLiveCmd' + self.ID})
+
+            self.nvim.api.clear_autocmds(
+                    {'group': 'tshunkyPyAutoLiveCmd' + self.ID})
+
             self.autocmd(['CursorHold', 'CursorHoldI'],
                          'call TshunkyPyLiveCallback()',
                          'tshunkyPyAutoLiveCmd' + self.ID)
+
             self.runAllInvalid()
         else:
             self.echo('Disabled tshunkyPy live mode')
-            self.nvim.api.clear_autocmds({'group': 'tshunkyPyAutoLiveCmd' + self.ID})
+
+            self.nvim.api.clear_autocmds(
+                    {'group': 'tshunkyPyAutoLiveCmd' + self.ID})
+
             self.autocmd(['CursorHold', 'CursorHoldI'],
                          'TshunkyPyUpdate',
                          'tshunkyPyAutoLiveCmd' + self.ID)
@@ -177,7 +192,7 @@ class NvimInterface:
         self.liveMode =  not self.liveMode
         self.updateAutoCommands()
 
-    def updateLive(self):
+    def liveCallback(self):
         if self.update():
             self.runAllInvalid()
 
@@ -244,7 +259,7 @@ class NvimInterface:
         # handle chunk outputs
         buf.api.clear_namespace(self.vtext_ns, 0, -1)
         for lineno, text in self.chunkManager.getVTexts():
-            vtext = ['>> ' + text.replace('\n', '\\n'), 'tshunkyPyVErrorhl']
+            vtext = ['>> ' + text.replace('\n', '\\n'), 'tshunkyPyVTexthl']
             try:
                 buf.api.set_extmark(self.vtext_ns, lineno-1, 0,
                                             {'virt_text': [vtext],
