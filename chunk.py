@@ -1,4 +1,5 @@
 import sys
+import ast
 import logging
 import dill
 import types
@@ -22,15 +23,20 @@ class StateWrapper(dict):
         return self.data.__setitem__(key, value)
 
 class Chunk(object):
-    def __init__(self, chash, objHash, codeObject, sourceChunk, lineno,
-                 end_lineno, prevChunk):
+    def __init__(self, chash, node, sourceChunk, filename, prevChunk):
 
         self.chash = chash
-        self.codeObject = codeObject
-        self.objHash = objHash
         self.sourceChunk = sourceChunk
-        self.lineRange = range(lineno, end_lineno + 1)
         self.prevChunk = prevChunk
+
+        if node:
+            wrapperModule = ast.Module(body=[node], type_ignores=[])
+            self.codeObject = compile(wrapperModule, filename, 'exec')
+
+            self.lineRange = range(node.lineno, node.end_lineno + 1)
+        else:
+            assert isinstance(self, DummyInitialChunk)
+
 
         # all chunks -- of the same "execution chain" / ChunkManager -- share
         # the same stateWrapper. Only for the DummyInitialChunk
@@ -43,8 +49,7 @@ class Chunk(object):
         self.stdout = None
         self.vtexts = []
 
-    def update(self, sourceChunk, lineno, end_lineno):
-        self.sourceChunk = sourceChunk
+    def update(self, lineno, end_lineno):
         self.lineRange = range(lineno, end_lineno+1)
 
     def execute(self):
@@ -103,10 +108,10 @@ class Chunk(object):
             else:
                 self.valid = True
 
-        self.stdout = stdoutBuffer.getvalue().strip()
+        self.stdout = stdoutBuffer.getvalue()
         self.vtexts = printOutputs[:]
         if error:
-            self.stdout = self.stdout + error[1]
+            self.stdout = self.stdout + '\n' + error[1]
             self.vtexts.insert(0, error)
 
         # unload modules that are not imported in the outside world
@@ -128,7 +133,7 @@ class Chunk(object):
 
 class DummyInitialChunk(Chunk):
     def __init__(self, initialNamespace):
-        super().__init__(0, 0, None, None, 0, 0, None)
+        super().__init__(0, None, None, None, None)
         self.namespace = initialNamespace
         self.valid = True
 

@@ -8,8 +8,6 @@ from .chunk import Chunk, DummyInitialChunk
 class ChunkManager(object):
     def __init__(self):
         self.chunkList = []
-
-        self.objCache = {}
         self.chunks = {}
 
         self.error = None
@@ -47,29 +45,21 @@ class ChunkManager(object):
         prevChunk = DummyInitialChunk({})
 
         for n in module_ast.body:
-            # calculate (code) object hash
-            sourceChunk = ast.get_source_segment(source, n)
-            assert sourceChunk
-            objHash = (str(len(self.chunkList)) + sourceChunk).__hash__()
-
             # calculate chunk hash
-            chash = (objHash + prevChunk.chash).__hash__()
+            src = ast.get_source_segment(source, n)
+            chash = f'{prevChunk.chash}{len(self.chunkList)}{src}'.__hash__()
             self.chunkList.append(chash)
-
-            # compile code object
-            self._updateObjCache(n, objHash, filename)
 
             # update chunk or create new one
             if chash in self.chunks:
                 # chunk (and it predecessors) did not change
                 # there might have been a whitespace change
                 chunk = self.chunks[chash]
-                chunk.update(sourceChunk, n.lineno, n.end_lineno)
+                chunk.update(n.lineno, n.end_lineno)
             else:
                 # chunk or a predecessor changed
                 # create new chunk
-                chunk = Chunk(chash, objHash, self.objCache[objHash],
-                              sourceChunk, n.lineno, n.end_lineno, prevChunk)
+                chunk = Chunk(chash, n, src, filename, prevChunk)
                 self.chunks[chash] = chunk
 
                 logging.debug('changed %s', self.chunks[chash].getDebugId())
@@ -134,6 +124,13 @@ class ChunkManager(object):
 
         return  vtexts
 
+    def getStdout(self):
+        if self.error:
+            return repr(self.error)
+
+        outList = [c.stdout for c in self._getOrderedChunks() if c.stdout]
+        return ''.join(outList)
+
     def _getOrderedChunks(self):
         return [self.chunks[chash] for chash in self.chunkList]
 
@@ -142,13 +139,6 @@ class ChunkManager(object):
             if line in chunk.lineRange:
                 return chunk
         return None
-
-    def _updateObjCache(self, node, objHash, filename):
-        if objHash in self.objCache.keys():
-            return
-
-        wrapperModule = ast.Module(body=[node], type_ignores=[])
-        self.objCache[objHash] = compile(wrapperModule, filename, 'exec')
 
     def _cleanUpCaches(self):
         changed = False
@@ -161,13 +151,7 @@ class ChunkManager(object):
             assert chash not in self.chunkList
             del self.chunks[chash]
 
-        objSet = set(c.objHash for c in self.chunks.values())
-        objCacheSet = set(self.objCache.keys())
-        for objHash in objCacheSet - objSet:
-            del self.objCache[objHash]
-
         assert len(self.chunks) == len(self.chunkList)
-        assert len(self.objCache) <= len(self.chunkList)
 
         return changed
 

@@ -1,15 +1,7 @@
 from .chunkManager import ChunkManager
+from .utils import wrapLines
 
 import pynvim
-
-
-def wrapLines(lines, width):
-    import textwrap
-    newLines = []
-    for l in lines:
-        newLines.extend(textwrap.wrap(l, width-1))
-
-    return newLines
 
 
 class NvimInterface:
@@ -25,6 +17,7 @@ class NvimInterface:
 
         self.popupBuffer = None
         self.popupWindow = None
+        self.stdoutBuffer = None
 
         self.setKeymaps()
         self.initSignsAndVText()
@@ -70,12 +63,14 @@ class NvimInterface:
         keymap('n', '<M-i>', ':TshunkyPyRunAllInvalid<CR>', opts)
         keymap('n', '<M-f>', ':TshunkyPyRunFirstInvalid<CR>', opts)
         keymap('n', '<M-x>', ':TshunkyPyLive<CR>', opts)
+        keymap('n', '<M-o>', ':TshunkyPyShowStdout<CR>', opts)
 
         keymap('i', '<M-u>', '<ESC>:TshunkyPyUpdate<CR>li', opts)
         keymap('i', '<M-a>', '<ESC>:TshunkyPyRunAll<CR>li', opts)
         keymap('i', '<M-i>', '<ESC>:TshunkyPyRunAllInvalid<CR>li', opts)
         keymap('i', '<M-f>', '<ESC>:TshunkyPyRunFirstInvalid<CR>li', opts)
         keymap('i', '<M-x>', '<ESC>:TshunkyPyLive<CR>li', opts)
+        keymap('i', '<M-o>', '<ESC>:TshunkyPyShowStdout<CR>li', opts)
 
         self.nvim.api.create_augroup("tshunkyPyAutoCmds" + self.ID, {'clear': True})
         self.nvim.api.create_augroup("tshunkyPyAutoLiveCmd" + self.ID, {'clear': True})
@@ -98,6 +93,14 @@ class NvimInterface:
 
         self.nvim.api.command(f'lua vim.diagnostic.enable({buf.handle})')
 
+        if self.stdoutBuffer:
+            self.nvim.command(f'bw {self.stdoutBuffer.handle}')
+            self.stdoutBuffer = None
+
+        if self.popupBuffer:
+            self.nvim.command(f'bw {self.popupBuffer.handle}')
+            self.popupBuffer = None
+
     def cursorMoved(self):
         self.nvim.api.clear_autocmds({'group': 'tshunkyPyAutoCursorMovedCmd' + self.ID})
         assert self.popupWindow != None
@@ -114,9 +117,9 @@ class NvimInterface:
     def cursorHold(self):
         popupWidth = 80
 
+        # get stdout of "selected" chunk and prepare it
         lineno, col = self.nvim.funcs.getpos('.')[1:-1]
         chunk = self.chunkManager._getChunkByLine(lineno)
-
         if not chunk or not chunk.stdout:
             return
 
@@ -235,7 +238,7 @@ class NvimInterface:
         except pynvim.api.common.NvimError: # type: ignore
             pass
 
-    def _refreshChunkOutputs(self):
+    def _refreshVTexts(self):
         buf = self.nvim.current.buffer
 
         # handle chunk outputs
@@ -250,7 +253,43 @@ class NvimInterface:
             except pynvim.api.common.NvimError: # type: ignore
                 pass
 
+    def showStdout(self):
+        if not self.stdoutBuffer:
+            return
+
+        mainWinId = self.nvim.current.window.handle
+
+        winid = self.nvim.funcs.bufwinid(self.stdoutBuffer.handle)
+        if winid == -1:
+            mainWinWidth = self.nvim.current.window.width
+            mainWinHeight = self.nvim.current.window.height
+            if mainWinWidth > 80:
+                self.nvim.command(f'vsp #{self.stdoutBuffer.handle}')
+                self.nvim.current.window.width = int(mainWinWidth / 3)
+            else:
+                self.nvim.command(f'sp #{self.stdoutBuffer.handle}')
+                self.nvim.current.window.height = int(mainWinHeight / 3)
+            self.stdoutBuffer.api.set_option('buflisted', False)
+            self.nvim.funcs.win_gotoid(mainWinId)
+        else:
+            self.nvim.api.win_close(winid, True)
+
+    def _refreshStdout(self):
+        buf = self.nvim.current.buffer
+
+        if not self.stdoutBuffer or not self.stdoutBuffer.valid:
+            self.stdoutBuffer = self.nvim.api.create_buf(False, True)
+            self.stdoutBuffer.api.set_option('buftype', 'nofile')
+            self.stdoutBuffer.api.set_option('buflisted', False)
+            self.stdoutBuffer.name = buf.name + '.tshunkyPy.stdout'
+
+        # set text
+        lines = self.chunkManager.getStdout().split('\n')
+        self.stdoutBuffer.api.set_option('modifiable', True)
+        self.stdoutBuffer[:] = lines
+        self.stdoutBuffer.api.set_option('modifiable', False)
 
     def _refresh(self):
         self._refreshInvalidRanges()
-        self._refreshChunkOutputs()
+        self._refreshVTexts()
+        self._refreshStdout()

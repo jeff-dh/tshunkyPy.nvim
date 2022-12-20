@@ -47,6 +47,10 @@ class NvimPlugin:
     def runFirstInvalid(self):
         self.getInterface().runFirstInvalid()
 
+    @pynvim.command('TshunkyPyShowStdout', sync=synced)
+    def showStdout(self):
+        self.getInterface().showStdout()
+
     @pynvim.function('TshunkyPyLiveCallback', sync=False)
     def updateLive(self, _):
         self.getInterface().updateLive()
