@@ -23,11 +23,13 @@ class StateWrapper(dict):
         return self.data.__setitem__(key, value)
 
 class Chunk(object):
-    def __init__(self, chash, node, sourceChunk, filename, prevChunk):
+    def __init__(self, chash, node, sourceChunk, filename, prevChunk,
+                 outputManager=None):
 
         self.chash = chash
         self.sourceChunk = sourceChunk
         self.prevChunk = prevChunk
+        self.outputManager = outputManager
 
         if node:
             wrapperModule = ast.Module(body=[node], type_ignores=[])
@@ -48,6 +50,9 @@ class Chunk(object):
         self.valid = False
         self.stdout = None
         self.vtexts = []
+
+        if self.outputManager:
+            self.outputManager.update(self)
 
     def update(self, lineno, end_lineno):
         self.lineRange = range(lineno, end_lineno+1)
@@ -104,9 +109,6 @@ class Chunk(object):
                 _, _, tb = sys.exc_info()
                 error = (traceback.extract_tb(tb)[-1][1],
                          traceback.format_exc())
-                self.valid = False
-            else:
-                self.valid = True
 
         self.stdout = stdoutBuffer.getvalue()
         self.vtexts = printOutputs[:]
@@ -125,6 +127,11 @@ class Chunk(object):
         afterModules = set([m for m in sys.modules.keys()])
         for m in (afterModules - beforeModules):
             del sys.modules[m]
+
+        self.valid = error == None
+
+        assert self.outputManager
+        self.outputManager.update(self)
 
         return self.valid
 

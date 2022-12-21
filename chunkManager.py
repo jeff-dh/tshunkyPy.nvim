@@ -6,39 +6,34 @@ from .chunk import Chunk, DummyInitialChunk
 
 
 class ChunkManager(object):
-    def __init__(self):
+    def __init__(self, outputManager):
         self.chunkList = []
         self.chunks = {}
+        self.outputManager = outputManager
 
-        self.error = None
+        self.isRunable = False
 
     def _parseSource(self, source):
         try:
             module_ast = ast.parse(source)
         except SyntaxError as e:
-            self.error = e
-            errorChunk = self._getChunkByLine(e.lineno)
-            if errorChunk:
-                idx = self.chunkList.index(errorChunk.chash)
-                for chash in self.chunkList[idx:]:
-                    c = self.chunks[chash]
-                    c.valid = False
-                    c.stdout = ''
-                    c.vtexts = []
+            self.isRunable = False
+            self.outputManager.setSyntaxError(e)
             return None
+
+        self.outputManager.setSyntaxError(None)
+        self.isRunable = True
 
         # wrap every expression statement into a print call
         return ExprPrintWrapper().visit(module_ast)
 
 
     def update(self, source, filename='<string>'):
-        #we request an update when the last state was an error state
-        needsUpdate = not self.error is None
-        self.error = None
+        changed = False
 
         module_ast = self._parseSource(source)
         if not module_ast:
-            return -1
+            return False
 
         #reset chunkList
         self.chunkList = []
@@ -46,8 +41,9 @@ class ChunkManager(object):
 
         for n in module_ast.body:
             # calculate chunk hash
-            src = ast.get_source_segment(source, n)
-            chash = f'{prevChunk.chash}{len(self.chunkList)}{src}'.__hash__()
+            sourceChunk = ast.get_source_segment(source, n)
+            chash = f'{prevChunk.chash}{sourceChunk}'.__hash__()
+
             self.chunkList.append(chash)
 
             # update chunk or create new one
@@ -59,21 +55,19 @@ class ChunkManager(object):
             else:
                 # chunk or a predecessor changed
                 # create new chunk
-                chunk = Chunk(chash, n, src, filename, prevChunk)
+                chunk = Chunk(chash, n, sourceChunk, filename,
+                              prevChunk, self.outputManager)
                 self.chunks[chash] = chunk
+                changed = True
 
                 logging.debug('changed %s', self.chunks[chash].getDebugId())
-                needsUpdate = True
 
             prevChunk = chunk
 
-        if self._cleanUpCaches():
-            needsUpdate = True
-        return needsUpdate
-
+        return self._cleanUpCache() or changed
 
     def executeAllChunks(self):
-        if self.error:
+        if not self.isRunable:
             return False
         for chunk in self._getOrderedChunks():
             if not chunk.execute():
@@ -82,7 +76,7 @@ class ChunkManager(object):
         return True
 
     def executeAllInvalidChunks(self):
-        if self.error:
+        if not self.isRunable:
             return False
         for chunk in self._getOrderedChunks():
             if not chunk.valid:
@@ -91,45 +85,13 @@ class ChunkManager(object):
         return True
 
     def executeFirstInvalidChunk(self):
-        if self.error:
+        if not self.isRunable:
             return False
         for chunk in self._getOrderedChunks():
             if not chunk.valid:
                 return chunk.execute()
 
         return False
-
-    def getInvalidChunkRanges(self):
-        ranges = []
-        for chunk in self._getOrderedChunks():
-            if not chunk.valid:
-                ranges.append(chunk.lineRange)
-
-        if self.error:
-            chunk = self._getChunkByLine(self.error.lineno)
-            if chunk:
-                ranges.append(chunk.lineRange)
-
-        return ranges
-
-    def getVTexts(self):
-        vtexts = []
-
-        for chash in self.chunkList:
-            c = self.chunks[chash]
-            vtexts.extend(c.vtexts)
-
-        if self.error:
-            vtexts.append((self.error.lineno, repr(self.error)))
-
-        return  vtexts
-
-    def getStdout(self):
-        if self.error:
-            return repr(self.error)
-
-        outList = [c.stdout for c in self._getOrderedChunks() if c.stdout]
-        return ''.join(outList)
 
     def _getOrderedChunks(self):
         return [self.chunks[chash] for chash in self.chunkList]
@@ -140,7 +102,7 @@ class ChunkManager(object):
                 return chunk
         return None
 
-    def _cleanUpCaches(self):
+    def _cleanUpCache(self):
         changed = False
         chunksSet = set(self.chunks.keys())
         listSet = set(self.chunkList)
@@ -149,6 +111,8 @@ class ChunkManager(object):
             changed = True
 
             assert chash not in self.chunkList
+
+            self.outputManager.deleteHandler(chash)
             del self.chunks[chash]
 
         assert len(self.chunks) == len(self.chunkList)
