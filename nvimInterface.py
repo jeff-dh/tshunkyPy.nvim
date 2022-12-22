@@ -169,7 +169,7 @@ class NvimInterface:
                     {'group': 'tshunkyPyAutoLiveCmd' + self.ID})
 
             self.autocmd(['CursorHold', 'CursorHoldI'],
-                         'call TshunkyPyLiveCallback()',
+                         'TshunkyPyRunAllInvalid',
                          'tshunkyPyAutoLiveCmd' + self.ID)
 
             self.runAllInvalid()
@@ -186,10 +186,6 @@ class NvimInterface:
     def live(self):
         self.liveMode =  not self.liveMode
         self.updateAutoCommands()
-
-    def liveCallback(self):
-        if self.update():
-            self.runAllInvalid()
 
     def update(self):
         with self.nlock:

@@ -52,10 +52,6 @@ class NvimPlugin:
     def showStdout(self):
         self.getInterface().showStdout()
 
-    @pynvim.function('TshunkyPyLiveCallback', sync=False)
-    def liveCallback(self, _):
-        self.getInterface().liveCallback()
-
     @pynvim.function('TshunkyPyCursorMovedCallback', sync=False)
     def cursorMoved(self, _):
         self.getInterface().cursorMoved()
