@@ -2,12 +2,13 @@ import pynvim
 
 
 class ChunkOutputHandler:
-    def  __init__(self, nvim: pynvim.Nvim):
+    def  __init__(self, chash, nvim: pynvim.Nvim):
         self.nvim = nvim
 
-        self.id = None
+        self.id = str(chash)
 
-        self.vtext_ns = None
+        self.vtext_ns = self.nvim.api.create_namespace(
+                                    f'tshunkyPyVirtualText{self.id}')
         self.signIds = []
 
     def cleanup(self):
@@ -21,34 +22,27 @@ class ChunkOutputHandler:
 
         self.signIds = []
 
-    def update(self, chash, valid, lineRange, vtexts):
+    def _placeSign(self, name, lineno):
+        # a (nice(r)) wrapper around sign_place(...)
         buf = self.nvim.current.buffer
+        sign_place = self.nvim.funcs.sign_place
 
-        # a nice(r) wrapper around sign_place(...)
-        def placeSign(name, lineno):
-            sign_place = self.nvim.funcs.sign_place
+        i = sign_place(0, 'tshunkyPySigns', name, buf.handle,
+                        {'lnum': lineno, 'priority': 20})
+        self.signIds.append(i)
 
-            i = sign_place(0, 'tshunkyPySigns', name, buf.handle,
-                           {'lnum': lineno, 'priority': 20})
-            self.signIds.append(i)
-
-        # init some stuff if neccessary
-        if not self.id:
-            self.id = str(chash)
-        if not self.vtext_ns:
-            self.vtext_ns = self.nvim.api.create_namespace(
-                                        f'tshunkyPyVirtualText{self.id}')
-
+    def update(self, valid, lineRange, vtexts):
         # delete old stuff
         self.cleanup()
 
         # place signs and set bg color for invalid chunks
         if not valid:
-            placeSign('tshunkyPyInvalidSign', lineRange.start)
+            self._placeSign('tshunkyPyInvalidSign', lineRange.start)
             for lineno in lineRange:
-                placeSign('tshunkyPyInvalidLineBg', lineno)
+                self._placeSign('tshunkyPyInvalidLineBg', lineno)
 
         # display the virtal text messages from vtexts
+        buf = self.nvim.current.buffer
         for lno, text in vtexts:
             vtext = ['>> ' + text.replace('\n', '\\n'), 'tshunkyPyVTextHl']
             mark = {'virt_text': [vtext], 'hl_mode': 'combine', 'priority': 200}
@@ -96,12 +90,16 @@ class OutputManager:
         self.stdoutBuffer = None
 
     def update(self, chunk):
+        # create handler if neccessary
         if not chunk.chash in self.chunkSignHandlers.keys():
-            self.chunkSignHandlers[chunk.chash] = ChunkOutputHandler(self.nvim)
+            self.chunkSignHandlers[chunk.chash] = \
+                    ChunkOutputHandler(chunk.chash, self.nvim)
 
+        # call handler.update
         handler = self.chunkSignHandlers[chunk.chash]
-        handler.update(chunk.chash, chunk.valid, chunk.lineRange, chunk.vtexts)
+        handler.update(chunk.valid, chunk.lineRange, chunk.vtexts)
 
+        # collect stdout and set stdoutBuffer
         if chunk.valid or chunk.prevChunk.valid:
             stdoutList = []
             c = chunk
@@ -126,7 +124,7 @@ class OutputManager:
             return
 
         if not shash in self.chunkSignHandlers.keys():
-            self.chunkSignHandlers[shash] = ChunkOutputHandler(self.nvim)
+            self.chunkSignHandlers[shash] = ChunkOutputHandler('SyntaxError', self.nvim)
 
         handler = self.chunkSignHandlers[shash]
 
