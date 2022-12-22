@@ -1,18 +1,35 @@
-
 'Hello World!'
 
 a = 1
 
 print(a)
-print(a)
 
-a = 3
+def foo():
+    print(a)
 
-print(a)
 
-def foo(x):
-    print(f'foo{x}')
+def blub():
+    print(a)
 
-foo(9876)
+foo()
 
-32 * 72
+a = 15
+
+blub()
+
+foo()
+
+d = {}
+d[2] = 2
+d
+
+import math
+
+math.aa = 1
+
+'laa'
+math.aa
+
+math.aa = 3
+math.aa
+
