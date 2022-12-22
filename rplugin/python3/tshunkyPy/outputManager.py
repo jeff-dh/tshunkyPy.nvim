@@ -124,9 +124,10 @@ class OutputManager:
             return
 
         if not shash in self.chunkSignHandlers.keys():
-            self.chunkSignHandlers[shash] = ChunkOutputHandler('SyntaxError', self.nvim)
+            self.chunkSignHandlers[shash] = \
+                    ChunkOutputHandler(shash, self.nvim)
 
         handler = self.chunkSignHandlers[shash]
 
-        handler.update('SyntaxError', False, range(e.lineno, e.lineno + 1),
+        handler.update(False, range(e.lineno, e.lineno + 1),
                        [(e.lineno, repr(e))])
