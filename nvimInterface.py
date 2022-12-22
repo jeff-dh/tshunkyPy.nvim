@@ -3,7 +3,21 @@ from .outputManager import OutputManager
 
 import pynvim
 import textwrap
+import threading
 
+
+class NvimLock:
+    def __init__(self, nvim):
+        self.nvim = nvim
+        self.lock = threading.Lock()
+
+    def __enter__(self):
+        while not self.lock.acquire(blocking=False):
+            #noop as yield, couldn't find any better solution....
+            self.nvim.api.command('')
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.lock.release()
 
 class NvimInterface:
 
@@ -18,6 +32,7 @@ class NvimInterface:
         self.liveMode = False
 
         self.popupBuffer = None
+        self.nlock = NvimLock(nvim)
 
         self.setKeymaps()
 
@@ -177,22 +192,26 @@ class NvimInterface:
             self.runAllInvalid()
 
     def update(self):
-        buf = self.nvim.current.buffer
-        source = '\n'.join(buf[:])
+        with self.nlock:
+            buf = self.nvim.current.buffer
+            source = '\n'.join(buf[:])
 
-        return self.chunkManager.update(source, buf.name)
+            return self.chunkManager.update(source, buf.name)
 
     def runAll(self):
         self.update()
-        self.chunkManager.executeAllChunks()
+        with self.nlock:
+            self.chunkManager.executeAllChunks()
 
     def runAllInvalid(self):
         self.update()
-        self.chunkManager.executeAllInvalidChunks()
+        with self.nlock:
+            self.chunkManager.executeAllInvalidChunks()
 
     def runFirstInvalid(self):
         self.update()
-        self.chunkManager.executeFirstInvalidChunk()
+        with self.nlock:
+            self.chunkManager.executeFirstInvalidChunk()
 
     def showStdout(self):
         stdoutBuf = self.outputManager.stdoutBuffer
