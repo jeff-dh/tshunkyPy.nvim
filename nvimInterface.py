@@ -2,7 +2,6 @@ from .chunkManager import ChunkManager
 from .outputManager import OutputManager
 
 import pynvim
-from pynvim.api.common import NvimError
 import textwrap
 
 
@@ -28,7 +27,7 @@ class NvimInterface:
         if not isinstance(x, str):
             x = repr(x)
         x = x.replace('\"', '\'')
-        self.nvim.api.command(f'lua print("{x}")')
+        self.nvim.out_write(x + '\n')
 
     def autocmd(self, events, cmd, group=None):
         if group == None:
@@ -98,7 +97,7 @@ class NvimInterface:
             # anyway it closes the window
             try:
                 self.nvim.api.win_close(winid, True)
-            except NvimError:
+            except pynvim.api.common.NvimError: # type: ignore
                 pass
 
     def cursorHold(self):

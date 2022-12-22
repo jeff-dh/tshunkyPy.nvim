@@ -1,6 +1,7 @@
+from .nvimInterface import NvimInterface
+
 import pynvim
 
-from .nvimInterface import NvimInterface
 
 @pynvim.plugin
 class NvimPlugin:
