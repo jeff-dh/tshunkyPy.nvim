@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import time
 import logging
 
 logFormat = '%(levelname)s (%(filename)s:%(lineno)s): %(message)s'
@@ -7,25 +8,32 @@ logging.basicConfig(format=logFormat, level=logging.DEBUG)
 
 from ..chunkManager import ChunkManager
 
-chunkManager = ChunkManager()
+class OutputManager:
+    def update(self, chunk):
+        if not chunk.vtexts:
+            return
 
-def executeFile(filename):
-    with open(filename, 'r') as w:
-        source = w.read()
+        ts = [f'{file.name}:{lno} {t}' for lno, t in chunk.vtexts]
+        print('\n'.join(ts))
 
-        chunkManager.update(source, filename)
-        chunkManager.executeAllInvalidChunks()
+    def deleteHandler(self, chash):
+        pass
 
-        for lineno, msg, _ in chunkManager.getOutput():
-            print(f'{Path(filename).name}:{lineno} {msg}')
-
+    def setSyntaxError(self, e):
+        if e:
+            print(repr(e))
 
 
 if __name__ == '__main__':
+    file = Path(__file__).parent / 'testSource.py'
+    chunkManager = ChunkManager(OutputManager())
+
     while True:
         print('--------')
-        file = Path(__file__).parent / 'testSource.py'
-        executeFile(file.as_posix())
-        import time
+        with open(file.as_posix(), 'r') as w:
+            source = w.read()
+
+            chunkManager.update(source, file.as_posix())
+            chunkManager.executeAllInvalidChunks()
         time.sleep(2)
 
