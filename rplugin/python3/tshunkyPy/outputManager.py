@@ -2,8 +2,9 @@ import pynvim
 
 
 class ChunkOutputHandler:
-    def  __init__(self, chash, nvim: pynvim.Nvim):
+    def  __init__(self, chash, buf, nvim: pynvim.Nvim):
         self.nvim = nvim
+        self.buf = buf
 
         self.id = str(chash)
 
@@ -17,17 +18,15 @@ class ChunkOutputHandler:
             self.nvim.funcs.sign_unplace('tshunkyPySigns', {'id': sid})
 
         if self.vtext_ns:
-            buf = self.nvim.current.buffer
-            buf.api.clear_namespace(self.vtext_ns, 0, -1)
+            self.buf.api.clear_namespace(self.vtext_ns, 0, -1)
 
         self.signIds = []
 
     def _placeSign(self, name, lineno):
         # a (nice(r)) wrapper around sign_place(...)
-        buf = self.nvim.current.buffer
         sign_place = self.nvim.funcs.sign_place
 
-        i = sign_place(0, 'tshunkyPySigns', name, buf.handle,
+        i = sign_place(0, 'tshunkyPySigns', name, self.buf.handle,
                         {'lnum': lineno, 'priority': 20})
         self.signIds.append(i)
 
@@ -42,16 +41,16 @@ class ChunkOutputHandler:
                 self._placeSign('tshunkyPyInvalidLineBg', lineno)
 
         # display the virtal text messages from vtexts
-        buf = self.nvim.current.buffer
         for lno, text in vtexts:
             vtext = ['>> ' + text.replace('\n', '\\n'), 'tshunkyPyVTextHl']
             mark = {'virt_text': [vtext], 'hl_mode': 'combine', 'priority': 200}
-            buf.api.set_extmark(self.vtext_ns, lno-1, 0, mark)
+            self.buf.api.set_extmark(self.vtext_ns, lno-1, 0, mark)
 
 class OutputManager:
 
-    def __init__(self, nvim):
+    def __init__(self, buf, nvim):
         self.nvim = nvim
+        self.buf = buf
         self.chunkSignHandlers = {}
 
         command = self.nvim.api.command
@@ -93,7 +92,7 @@ class OutputManager:
         # create handler if neccessary
         if not chunk.chash in self.chunkSignHandlers.keys():
             self.chunkSignHandlers[chunk.chash] = \
-                    ChunkOutputHandler(chunk.chash, self.nvim)
+                    ChunkOutputHandler(chunk.chash, self.buf, self.nvim)
 
         # call handler.update
         handler = self.chunkSignHandlers[chunk.chash]
@@ -125,7 +124,7 @@ class OutputManager:
 
         if not shash in self.chunkSignHandlers.keys():
             self.chunkSignHandlers[shash] = \
-                    ChunkOutputHandler(shash, self.nvim)
+                    ChunkOutputHandler(shash, self.buf, self.nvim)
 
         handler = self.chunkSignHandlers[shash]
 

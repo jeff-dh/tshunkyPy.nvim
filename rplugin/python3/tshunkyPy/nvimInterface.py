@@ -27,7 +27,7 @@ class NvimInterface:
         buf = self.nvim.current.buffer
         self.ID = str(buf.handle)
 
-        self.outputManager = OutputManager(self.nvim)
+        self.outputManager = OutputManager(buf, self.nvim)
         self.chunkManager = ChunkManager(self.outputManager)
         self.liveMode = False
 
