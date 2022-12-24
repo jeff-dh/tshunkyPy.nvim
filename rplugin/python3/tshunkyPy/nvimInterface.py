@@ -95,11 +95,18 @@ class NvimInterface:
             command(f'bw {self.popupBuffer.handle}')
             self.popupBuffer = None
 
+        self.echo('tshunkyPy quit....')
+
     def cursorMoved(self):
         self.nvim.api.clear_autocmds(
                 {'group': 'tshunkyPyAutoCursorMovedCmd' + self.ID})
 
-        assert self.popupBuffer
+        # assert self.popupBuffer
+        # this might happen if the popup box is open
+        # and the open buffer changes
+        if not self.popupBuffer:
+            return
+
         winid = self.nvim.funcs.bufwinid(self.popupBuffer.handle)
 
         if winid != -1:

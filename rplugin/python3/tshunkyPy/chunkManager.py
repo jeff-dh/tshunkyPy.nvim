@@ -81,6 +81,12 @@ class ChunkManager(object):
     def executeAllChunks(self):
         if not self.isRunable:
             return False
+        orderedChunks = self._getOrderedChunks()
+        for chunk in orderedChunks:
+            if chunk.valid:
+                chunk.valid = False
+                self.outputManager.update(chunk)
+
         for chunk in self._getOrderedChunks():
             if not chunk.execute():
                 return False
