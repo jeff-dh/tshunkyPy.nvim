@@ -107,7 +107,7 @@ class OutputManager:
         # collect stdout and set stdoutBuffer
         if chunk.valid or chunk.prevChunk.valid:
             stdoutList = []
-            c = chunk
+            c = chunk if chunk.valid else chunk.prevChunk
             while c:
                 if c.stdout:
                     stdoutList.extend(c.stdout.split('\n'))
