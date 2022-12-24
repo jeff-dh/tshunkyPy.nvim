@@ -1,8 +1,8 @@
 from .chunkManager import ChunkManager
 from .outputManager import OutputManager
+from .config import config
 
 import pynvim
-import textwrap
 import threading
 
 
@@ -18,6 +18,7 @@ class NvimLock:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.lock.release()
+from textwrap import wrap
 
 class NvimInterface:
 
@@ -55,19 +56,12 @@ class NvimInterface:
         keymap = self.buf.api.set_keymap
         opts = { 'silent': True, 'noremap': True, 'nowait': True}
 
-        keymap('n', '<M-u>', ':TshunkyPyUpdate<CR>', opts)
-        keymap('n', '<M-a>', ':TshunkyPyRunAll<CR>', opts)
-        keymap('n', '<M-i>', ':TshunkyPyRunAllInvalid<CR>', opts)
-        keymap('n', '<M-f>', ':TshunkyPyRunFirstInvalid<CR>', opts)
-        keymap('n', '<M-x>', ':TshunkyPyLive<CR>', opts)
-        keymap('n', '<M-o>', ':TshunkyPyShowStdout<CR>', opts)
-
-        keymap('i', '<M-u>', '<ESC>:TshunkyPyUpdate<CR>li', opts)
-        keymap('i', '<M-a>', '<ESC>:TshunkyPyRunAll<CR>li', opts)
-        keymap('i', '<M-i>', '<ESC>:TshunkyPyRunAllInvalid<CR>li', opts)
-        keymap('i', '<M-f>', '<ESC>:TshunkyPyRunFirstInvalid<CR>li', opts)
-        keymap('i', '<M-x>', '<ESC>:TshunkyPyLive<CR>li', opts)
-        keymap('i', '<M-o>', '<ESC>:TshunkyPyShowStdout<CR>li', opts)
+        for cmd, keys in config.keymap.items():
+            if not keys:
+                continue
+            keymap('n', keys, f':{cmd}<CR>', opts)
+            if config.enableInsertKeymaps:
+                keymap('i', keys, f'<ESC>:{cmd}<CR><right>i', opts)
 
         create_augroup = self.nvim.api.create_augroup
         create_augroup("tshunkyPyAutoCmds" + self.ID, {'clear': True})
@@ -120,7 +114,6 @@ class NvimInterface:
                 pass
 
     def cursorHold(self):
-        popupWidth = 80
 
         # get stdout of "selected" chunk and prepare it
         lineno, col = self.nvim.funcs.getpos('.')[1:-1]
@@ -130,7 +123,7 @@ class NvimInterface:
 
         lines = chunk.stdout.strip().split('\n')
         lines = [wline for line in lines
-                       for wline in textwrap.wrap(line, popupWidth-1)]
+                       for wline in wrap(line, config.popupWidth-1)]
 
         if not len(lines) > 1:
             return
@@ -148,7 +141,7 @@ class NvimInterface:
 
         #window opts
         opts = {'relative': 'cursor',
-                'width': popupWidth,
+                'width': config.popupWidth,
                 'height': len(lines),
                 'col': len(self.nvim.current.line) + 5 - col,
                 'style': 'minimal',
@@ -172,8 +165,8 @@ class NvimInterface:
             self.nvim.api.clear_autocmds(
                     {'group': 'tshunkyPyAutoLiveCmd' + self.ID})
 
-            self.autocmd(['CursorHold', 'CursorHoldI'],
-                         'TshunkyPyRunAllInvalid',
+            self.autocmd(config.liveTriggerEvents,
+                         config.liveCommand,
                          'tshunkyPyAutoLiveCmd' + self.ID)
 
             self.runAllInvalid()
@@ -183,9 +176,10 @@ class NvimInterface:
             self.nvim.api.clear_autocmds(
                     {'group': 'tshunkyPyAutoLiveCmd' + self.ID})
 
-            self.autocmd(['CursorHold', 'CursorHoldI'],
-                         'TshunkyPyUpdate',
-                         'tshunkyPyAutoLiveCmd' + self.ID)
+            if config.semiLiveCommand:
+                self.autocmd(config.liveTriggerEvents,
+                             config.semiLiveCommand,
+                            'tshunkyPyAutoLiveCmd' + self.ID)
 
     def live(self):
         self.liveMode =  not self.liveMode

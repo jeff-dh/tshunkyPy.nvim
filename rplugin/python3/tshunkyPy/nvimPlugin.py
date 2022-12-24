@@ -1,4 +1,5 @@
 from .nvimInterface import NvimInterface
+from .config import config
 
 import pynvim
 
@@ -10,6 +11,10 @@ class NvimPlugin:
     def __init__(self, nvim: pynvim.Nvim):
         self.nvimInterfaces = {}
         self.nvim = nvim
+
+        luaConfig = self.nvim.exec_lua('return require("tshunkyPy").getConfig()')
+        if luaConfig:
+            config.update(luaConfig)
 
     def getInterface(self):
         bufId = self.nvim.current.buffer.handle

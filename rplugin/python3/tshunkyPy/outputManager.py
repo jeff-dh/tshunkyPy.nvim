@@ -1,4 +1,5 @@
 import pynvim
+from .config import config
 
 
 class ChunkOutputHandler:
@@ -38,12 +39,12 @@ class ChunkOutputHandler:
         if not valid:
             self._placeSign('tshunkyPyInvalidSign', lineRange.start)
             for lineno in lineRange:
-                self._placeSign('tshunkyPyInvalidLineBg', lineno)
+                self._placeSign('tshunkyPyInvalidLine', lineno)
 
         # display the virtal text messages from vtexts
         for lno, text in vtexts:
             vtext = ['>> ' + text.replace('\n', '\\n'), 'tshunkyPyVTextHl']
-            mark = {'virt_text': [vtext], 'hl_mode': 'combine', 'priority': 200}
+            mark = {'virt_text': [vtext], 'priority': config.vtextPriority}
             self.buf.api.set_extmark(self.vtext_ns, lno-1, 0, mark)
 
 class OutputManager:
@@ -56,15 +57,19 @@ class OutputManager:
         command = self.nvim.api.command
         sign_define = self.nvim.funcs.sign_define
 
-        command('highlight tshunkyPyInvalidSignHl guibg=red')
-        command('highlight tshunkyPyInvalidLineBgHl guibg=#111111')
+        command('highlight tshunkyPyInvalidSignHl ' +
+                f'{config.invalidSignHighlight}')
+        command('highlight tshunkyPyInvalidLineHl ' +
+                f'{config.invalidLineHighlight}')
+
 
         sign_define('tshunkyPyInvalidSign',
-                    {'text': '>>', 'texthl': 'tshunkyPyInvalidSignHl'})
-        sign_define('tshunkyPyInvalidLineBg',
-                    {'linehl': 'tshunkyPyInvalidLineBgHl'})
+                    {'text': config.invalidSign,
+                     'texthl': 'tshunkyPyInvalidSignHl'})
+        sign_define('tshunkyPyInvalidLine',
+                    {'linehl': 'tshunkyPyInvalidLineHl'})
 
-        command('highlight tshunkyPyVTextHl gui=bold guifg=#c84848')
+        command(f'highlight tshunkyPyVTextHl {config.vtextHighlight}')
 
         buf = self.nvim.current.buffer
         self.stdoutBuffer = self.nvim.api.create_buf(False, True)
