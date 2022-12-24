@@ -24,10 +24,10 @@ class NvimInterface:
     def __init__(self, nvim: pynvim.Nvim):
         self.nvim = nvim
 
-        buf = self.nvim.current.buffer
-        self.ID = str(buf.handle)
+        self.buf = self.nvim.current.buffer
+        self.ID = str(self.buf.handle)
 
-        self.outputManager = OutputManager(buf, self.nvim)
+        self.outputManager = OutputManager(self.buf, self.nvim)
         self.chunkManager = ChunkManager(self.outputManager)
         self.liveMode = False
 
@@ -36,7 +36,7 @@ class NvimInterface:
 
         self.setKeymaps()
 
-        self.nvim.api.command(f'lua vim.diagnostic.disable({buf.handle})')
+        self.nvim.api.command(f'lua vim.diagnostic.disable({self.buf.handle})')
 
     def echo(self, x):
         if not isinstance(x, str):
@@ -47,14 +47,12 @@ class NvimInterface:
     def autocmd(self, events, cmd, group=None):
         if group == None:
             group = 'tshunkyPyAutoCmds' + self.ID
-        buf = self.nvim.current.buffer
         self.nvim.api.create_autocmd(events, {'group': group,
-                                              'buffer': buf.handle,
+                                              'buffer': self.buf.handle,
                                               'command': cmd})
 
     def setKeymaps(self):
-        buf = self.nvim.current.buffer
-        keymap = buf.api.set_keymap
+        keymap = self.buf.api.set_keymap
         opts = { 'silent': True, 'noremap': True, 'nowait': True}
 
         keymap('n', '<M-u>', ':TshunkyPyUpdate<CR>', opts)
@@ -82,7 +80,6 @@ class NvimInterface:
         self.updateAutoCommands()
 
     def quit(self):
-        buf = self.nvim.current.buffer
         clear_autocmds = self.nvim.api.clear_autocmds
         command = self.nvim.api.command
 
@@ -90,7 +87,7 @@ class NvimInterface:
         clear_autocmds({'group': 'tshunkyPyAutoCmds' + self.ID})
         clear_autocmds({'group': 'tshunkyPyAutoLiveCmd' + self.ID})
 
-        command(f'lua vim.diagnostic.enable({buf.handle})')
+        command(f'lua vim.diagnostic.enable({self.buf.handle})')
 
         self.outputManager.quit()
 
@@ -189,10 +186,9 @@ class NvimInterface:
 
     def update(self):
         with self.nlock:
-            buf = self.nvim.current.buffer
-            source = '\n'.join(buf[:])
+            source = '\n'.join(self.buf[:])
 
-            return self.chunkManager.update(source, buf.name)
+            return self.chunkManager.update(source, self.buf.name)
 
     def runAll(self):
         self.update()
