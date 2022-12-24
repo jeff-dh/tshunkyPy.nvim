@@ -33,7 +33,7 @@ class ChunkOutputHandler:
                         {'lnum': lineno, 'priority': 20})
         self.signIds.append(i)
 
-    def update(self, valid, lineRange, vtexts):
+    def update(self, valid, lineRange, vtexts, stdout):
         # delete old stuff
         self.cleanup()
 
@@ -44,11 +44,19 @@ class ChunkOutputHandler:
                 self._placeSign('tshunkyPyInvalidLine', lineno)
 
         # display the virtal text messages from vtexts
-        if valid:
-            for lno, text in vtexts:
-                vtext = ['>> ' + text.replace('\n', '\\n'), 'tshunkyPyVTextHl']
-                mark = {'virt_text': [vtext], 'priority': config.vtextPriority}
-                self.buf.api.set_extmark(self.vtext_ns, lno-1, 0, mark)
+        for lno, text in vtexts.items():
+            s = text.replace('\n', '\\n')
+            vtext = [f'{config.vtextPrompt} ' + s, 'tshunkyPyVTextHl']
+            mark = {'virt_text': [vtext], 'priority': config.vtextPriority}
+            self.buf.api.set_extmark(self.vtext_ns, lno-1, 0, mark)
+
+        if stdout:
+            s = stdout.rstrip('\n').replace('\n', '\\n')
+            vtext = [f'{config.vtextPrompt} ' + s, 'tshunkyPyVTextStdoutHl']
+            mark = {'virt_text': [vtext], 'priority': config.vtextPriority + 1}
+            self.buf.api.set_extmark(self.vtext_ns, lineRange.stop-2, 0, mark)
+
+
 
 class OutputManager:
 
@@ -73,6 +81,7 @@ class OutputManager:
                     {'linehl': 'tshunkyPyInvalidLineHl'})
 
         command(f'highlight tshunkyPyVTextHl {config.vtextHighlight}')
+        command(f'highlight tshunkyPyVTextStdoutHl {config.vtextStdoutHighlight}')
 
         self.stdoutBuffer = \
             createBuffer(self.nvim, False, buftype='nofile',
@@ -102,7 +111,7 @@ class OutputManager:
 
         # call handler.update
         handler = self.chunkSignHandlers[chunk.chash]
-        handler.update(chunk.valid, chunk.lineRange, chunk.vtexts)
+        handler.update(chunk.valid, chunk.lineRange, chunk.vtexts, chunk.stdout)
 
         # collect stdout and set stdoutBuffer
         if chunk.valid or chunk.prevChunk.valid:
@@ -135,4 +144,4 @@ class OutputManager:
         handler = self.chunkSignHandlers[shash]
 
         handler.update(False, range(e.lineno, e.lineno + 1),
-                       [(e.lineno, repr(e))])
+                       {e.lineno: repr(e)}, '')

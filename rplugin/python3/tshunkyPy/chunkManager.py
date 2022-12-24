@@ -85,6 +85,8 @@ class ChunkManager(object):
         for chunk in orderedChunks:
             if chunk.valid:
                 chunk.valid = False
+                chunk.stdout = None
+                chunk.vtexts = {}
                 self.outputManager.update(chunk)
 
         for chunk in self._getOrderedChunks():

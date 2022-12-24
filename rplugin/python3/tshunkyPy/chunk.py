@@ -51,7 +51,7 @@ class Chunk(object):
 
         self.valid = False
         self.stdout = None
-        self.vtexts = []
+        self.vtexts = {}
 
         if self.outputManager:
             self.outputManager.update(self)
@@ -84,21 +84,15 @@ class Chunk(object):
                 self.namespace[k] = v
 
         # inject locally wrapped print and printExpr functions
-        printOutputs = []
-        def printWrapper(*args, **kwargs):
-            caller = inspect.getframeinfo(inspect.stack()[1][0])
-            printOutputs.append((caller.lineno, repr(*args)))
-            print(*args, **kwargs)
-
+        printOutputs = {}
         def printExprWrapper(x):
             if x == None:
                 return
             caller = inspect.getframeinfo(inspect.stack()[1][0])
             if not isinstance(x, str):
                 x = repr(x)
-            printOutputs.append((caller.lineno, x))
+            printOutputs[caller.lineno] = x
 
-        self.namespace['print'] = printWrapper
         self.namespace['printExpr'] = printExprWrapper
 
         # set our local namespace as "global namespace". This needs to be
@@ -119,10 +113,10 @@ class Chunk(object):
                          traceback.format_exc())
 
         self.stdout = stdoutBuffer.getvalue()
-        self.vtexts = printOutputs[:]
+        self.vtexts = dict(printOutputs)
         if error:
             self.stdout = self.stdout + '\n' + error[1]
-            self.vtexts.insert(0, error)
+            self.vtexts[error[0]] = error[1]
 
         # unload modules that are not imported in the outside world
         # (outside of the exec envinronment) this is necessary to

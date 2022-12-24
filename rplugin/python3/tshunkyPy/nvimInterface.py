@@ -105,10 +105,16 @@ class NvimInterface:
         # get stdout of "selected" chunk and prepare it
         lineno, col = self.nvim.funcs.getpos('.')[1:-1]
         chunk = self.chunkManager._getChunkByLine(lineno)
-        if not chunk or not chunk.stdout:
+        if not chunk:
             return
 
-        lines = chunk.stdout.strip().split('\n')
+        lines = [l for chunk in self.chunkManager._getOrderedChunks()
+                   if lineno in chunk.vtexts.keys()
+                   for l in chunk.vtexts[lineno].split('\n')]
+
+        if chunk.stdout:
+            lines.extend(chunk.stdout.rstrip('\n').split('\n'))
+
         lines = [wline for line in lines
                        for wline in wrap(line, config.popupWidth-1)]
 

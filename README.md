@@ -38,7 +38,9 @@ require('tshunkyPy').setup({
     invalidLineHighlight  = 'guibg=#141414', -- guifg=None to disable
 
     -- virtual text highlighting and priority
+    vtextPrompt           = '>>', -- '' to disable
     vtextHighlight        = 'gui=bold guifg=#ba4833', -- guifg=None to disable
+    vtextStdoutHighlight  = 'gui=bold guifg=#666666', -- guifg=None to disable
     vtextPriority         = 200,
 
     -- liveTriggerEvents:    the vim events that trigger the live callback
