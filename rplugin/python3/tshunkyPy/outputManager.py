@@ -44,10 +44,11 @@ class ChunkOutputHandler:
                 self._placeSign('tshunkyPyInvalidLine', lineno)
 
         # display the virtal text messages from vtexts
-        for lno, text in vtexts:
-            vtext = ['>> ' + text.replace('\n', '\\n'), 'tshunkyPyVTextHl']
-            mark = {'virt_text': [vtext], 'priority': config.vtextPriority}
-            self.buf.api.set_extmark(self.vtext_ns, lno-1, 0, mark)
+        if valid:
+            for lno, text in vtexts:
+                vtext = ['>> ' + text.replace('\n', '\\n'), 'tshunkyPyVTextHl']
+                mark = {'virt_text': [vtext], 'priority': config.vtextPriority}
+                self.buf.api.set_extmark(self.vtext_ns, lno-1, 0, mark)
 
 class OutputManager:
 

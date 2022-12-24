@@ -39,7 +39,12 @@ defaultConfig = {
                 'TshunkyPyRunFirstInvalid'  : '<M-f>',
                 'TshunkyPyLive'             : '<M-x>',
                 'TshunkyPyShowStdout'       : '<M-o>',
-                'TshunkyPyQuit'             : '<M-q>'}
+                'TshunkyPyQuit'             : '<M-q>'},
+
+    # this option fixes a small bug, but it cost some computational time
+    # if you're having issues with vtext positioning first try to set this
+    # option to False.'
+    'reuseCodeObjects'      : False,
 }
 
 config = ConfigDict()

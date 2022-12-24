@@ -1,3 +1,5 @@
+from .config import config
+
 import sys
 import ast
 import logging
@@ -30,11 +32,11 @@ class Chunk(object):
         self.sourceChunk = sourceChunk
         self.prevChunk = prevChunk
         self.outputManager = outputManager
+        self.filename = filename
+        self.node = node
+        self.codeObject = None
 
         if node:
-            wrapperModule = ast.Module(body=[node], type_ignores=[])
-            self.codeObject = compile(wrapperModule, filename, 'exec')
-
             self.lineRange = range(node.lineno, node.end_lineno + 1)
         else:
             assert isinstance(self, DummyInitialChunk)
@@ -54,14 +56,20 @@ class Chunk(object):
         if self.outputManager:
             self.outputManager.update(self)
 
-    def update(self, lineno, end_lineno):
-        self.lineRange = range(lineno, end_lineno+1)
+    def update(self, node):
+        self.lineRange = range(node.lineno, node.end_lineno+1)
+        self.node = node
 
     def execute(self):
         logging.debug('exec %s', self.getDebugId())
 
         assert self.prevChunk
         assert self.prevChunk.valid
+
+        # compile code if it's the first time we execute this chunk'
+        if not self.codeObject or not config.reuseCodeObjects:
+            wrapperModule = ast.Module(body=[self.node], type_ignores=[])
+            self.codeObject = compile(wrapperModule, self.filename, 'exec')
 
         # store the sys.modules before we execute this chunk
         beforeModules = set([m for m in sys.modules.keys()])

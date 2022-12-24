@@ -63,7 +63,7 @@ class ChunkManager(object):
                 # chunk (and it predecessors) did not change
                 # there might have been a whitespace change
                 chunk = self.chunks[chash]
-                chunk.update(n.lineno, n.end_lineno)
+                chunk.update(n)
             else:
                 # chunk or a predecessor changed
                 # create new chunk

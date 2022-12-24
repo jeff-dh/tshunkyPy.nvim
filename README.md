@@ -51,8 +51,8 @@ require('tshunkyPy').setup({
     semiLiveCommand       = 'TshunkyPyUpdate', --None to disable
 
     -- alternate live command config
---   liveTriggerEvents     = ['CursorHold', 'CursorHoldI'],
---   liveCommand           = 'TshunkyPyRunAll',
+--  liveTriggerEvents     = ['CursorHold', 'CursorHoldI'],
+--  liveCommand           = 'TshunkyPyRunAll',
 
     -- whether the key mapping should be mapped in insert mode
     enableInsertKeymaps   = true,
@@ -65,6 +65,9 @@ require('tshunkyPy').setup({
                TshunkyPyRunFirstInvalid  = '<M-f>', -- '' to disable
                TshunkyPyLive             = '<M-x>', -- '' to disable
                TshunkyPyShowStdout       = '<M-o>', -- '' to disable
-               TshunkyPyQuit             = '<M-q>'} -- '' to disable
+               TshunkyPyQuit             = '<M-q>'},-- '' to disable
+
+    -- this option fixes a small bug, but it cost some computational time
+    reuseCodeObjects      = false,
 })
 ```
