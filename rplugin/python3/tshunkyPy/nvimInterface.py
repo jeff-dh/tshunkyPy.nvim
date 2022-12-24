@@ -1,28 +1,15 @@
 from .chunkManager import ChunkManager
 from .outputManager import OutputManager
+from .utils.nvimUtils import createBuffer, modifiable, NvimLock
 from .config import config
 
-import pynvim
-import threading
-
-
-class NvimLock:
-    def __init__(self, nvim):
-        self.nvim = nvim
-        self.lock = threading.Lock()
-
-    def __enter__(self):
-        while not self.lock.acquire(blocking=False):
-            #noop as yield, couldn't find any better solution....
-            self.nvim.api.command('')
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.lock.release()
+from pynvim import Nvim
+from pynvim.api.common import NvimError
 from textwrap import wrap
 
 class NvimInterface:
 
-    def __init__(self, nvim: pynvim.Nvim):
+    def __init__(self, nvim: Nvim):
         self.nvim = nvim
 
         self.buf = self.nvim.current.buffer
@@ -110,7 +97,7 @@ class NvimInterface:
             # anyway it closes the window
             try:
                 self.nvim.api.win_close(winid, True)
-            except pynvim.api.common.NvimError: # type: ignore
+            except NvimError:
                 pass
 
     def cursorHold(self):
@@ -130,14 +117,11 @@ class NvimInterface:
 
         # create buffer
         if not self.popupBuffer or not self.popupBuffer.valid:
-            self.popupBuffer = self.nvim.api.create_buf(False, True)
-            self.popupBuffer.api.set_option('buftype', 'nofile')
-            self.popupBuffer.api.set_option('buflisted', False)
+            self.popupBuffer = createBuffer(self.nvim, False, buftype='nofile')
 
         # set text
-        self.popupBuffer.api.set_option('modifiable', True)
-        self.popupBuffer[:] = lines
-        self.popupBuffer.api.set_option('modifiable', False)
+        with modifiable(self.popupBuffer):
+            self.popupBuffer[:] = lines
 
         #window opts
         opts = {'relative': 'cursor',

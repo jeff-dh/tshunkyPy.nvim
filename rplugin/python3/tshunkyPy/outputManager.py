@@ -1,9 +1,11 @@
-import pynvim
+from .utils.nvimUtils import modifiable, createBuffer
 from .config import config
+
+from pynvim import Nvim
 
 
 class ChunkOutputHandler:
-    def  __init__(self, chash, buf, nvim: pynvim.Nvim):
+    def  __init__(self, chash, buf, nvim: Nvim):
         self.nvim = nvim
         self.buf = buf
 
@@ -71,11 +73,9 @@ class OutputManager:
 
         command(f'highlight tshunkyPyVTextHl {config.vtextHighlight}')
 
-        buf = self.nvim.current.buffer
-        self.stdoutBuffer = self.nvim.api.create_buf(False, True)
-        self.stdoutBuffer.api.set_option('buftype', 'nofile')
-        self.stdoutBuffer.api.set_option('buflisted', False)
-        self.stdoutBuffer.name = buf.name + '.tshunkyPy.stdout'
+        self.stdoutBuffer = \
+            createBuffer(self.nvim, False, buftype='nofile',
+                         name = self.buf.name + '.tshunkyPy.stdout')
 
     def deleteHandler(self, chash):
         if not chash in self.chunkSignHandlers.keys():
@@ -116,9 +116,9 @@ class OutputManager:
 
             assert self.stdoutBuffer
             stdoutList.reverse()
-            self.stdoutBuffer.api.set_option('modifiable', True)
-            self.stdoutBuffer[:] = stdoutList
-            self.stdoutBuffer.api.set_option('modifiable', False)
+
+            with modifiable(self.stdoutBuffer):
+                self.stdoutBuffer[:] = stdoutList
 
     def setSyntaxError(self, e):
         shash = 'SyntaxError'.__hash__()
