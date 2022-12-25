@@ -8,6 +8,7 @@ import types
 import inspect
 import traceback
 import pprint
+import copy
 
 class StateWrapper(dict):
     def __init__(self):
@@ -44,11 +45,12 @@ class Chunk(object):
 
 
         # all chunks -- of the same "execution chain" / ChunkManager -- share
-        # the same stateWrapper. Only for the DummyInitialChunk
+        # the same globalState. Only for the DummyInitialChunk
         # (-> prevChunk is None) a new StateWrapper is created -- and shared
         # with all other chunks
-        self.stateWrapper = prevChunk.stateWrapper if prevChunk \
-                                                   else StateWrapper()
+        self.globalState = prevChunk.globalState if prevChunk \
+                                                 else StateWrapper()
+        self.namespace = None
 
         self.valid = False
         self.stdout = None
@@ -76,13 +78,17 @@ class Chunk(object):
         beforeModules = set([m for m in sys.modules.keys()])
 
         # derive namespace from prevChunk, based on a dill copy
-        self.namespace = dill.copy(self.prevChunk.namespace)
+        self.namespace = {}
 
-        # copy function by reference! Otherwise their __globals__
+        # copy functions and classes by reference! Otherwise their __globals__
         # field gets invalid
         for k, v in self.prevChunk.namespace.items():
-            if isinstance(v, types.FunctionType):
+            if isinstance(v, types.FunctionType) or isinstance(v, type):
                 self.namespace[k] = v
+            elif isinstance(v, types.ModuleType):
+                self.namespace[k] = dill.copy(v)
+            else:
+                self.namespace[k] = copy.deepcopy(v)
 
         # inject locally wrapped print and printExpr functions
         printOutputs = {}
@@ -102,13 +108,13 @@ class Chunk(object):
         # global namespace (at chunk execution time! -> func.__globals__).
         # But since we want it to run on this chunks globals, we need a
         # wrapper to exchange the global namespace under the hood
-        self.stateWrapper.setData(self.namespace)
+        self.globalState.setData(self.namespace)
 
         # and execute the chunk and capture stdout
         with dill.temp.capture() as stdoutBuffer:
             error = None
             try:
-                exec(self.codeObject, self.stateWrapper)
+                exec(self.codeObject, self.globalState)
             except Exception:
                 _, _, tb = sys.exc_info()
                 error = (traceback.extract_tb(tb)[-1][1],
@@ -120,6 +126,8 @@ class Chunk(object):
             self.stdout = self.stdout + '\n' + error[1]
             self.vtexts[error[0]] = self.vtexts.get(error[0], [])
             self.vtexts[error[0]].append(error[1])
+
+        del self.namespace['printExpr']
 
         # unload modules that are not imported in the outside world
         # (outside of the exec envinronment) this is necessary to
