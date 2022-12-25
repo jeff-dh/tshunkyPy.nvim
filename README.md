@@ -65,6 +65,7 @@ require('tshunkyPy').setup({
                TshunkyPyRunAll           = '<M-a>', -- '' to disable
                TshunkyPyRunAllInvalid    = '<M-i>', -- '' to disable
                TshunkyPyRunFirstInvalid  = '<M-f>', -- '' to disable
+               TshunkyPyRunRange         = '<M-r>', -- '' to disable
                TshunkyPyLive             = '<M-x>', -- '' to disable
                TshunkyPyShowStdout       = '<M-o>', -- '' to disable
                TshunkyPyQuit             = '<M-q>'},-- '' to disable

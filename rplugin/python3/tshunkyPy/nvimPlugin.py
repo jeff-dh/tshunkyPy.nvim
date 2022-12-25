@@ -53,6 +53,10 @@ class NvimPlugin:
     def runFirstInvalid(self):
         self.getInterface().runFirstInvalid()
 
+    @pynvim.command('TshunkyPyRunRange', range='', sync=synced)
+    def runRange(self, srange):
+        self.getInterface().runRange(range(srange[0], srange[1]+1))
+
     @pynvim.command('TshunkyPyShowStdout', sync=synced)
     def showStdout(self):
         self.getInterface().showStdout()

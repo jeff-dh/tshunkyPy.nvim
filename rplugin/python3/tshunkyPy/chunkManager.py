@@ -113,6 +113,42 @@ class ChunkManager(object):
 
         return False
 
+    def executeRange(self, selectedRange):
+        if not self.isRunable:
+            return False
+
+        # find first chunk that overlapps with range and set all following
+        # chukns invalid
+        first = None
+        for chunk in self._getOrderedChunks():
+            if not first and selectedRange.start < chunk.lineRange.stop:
+                first = chunk
+
+            if first and chunk.valid:
+                chunk.valid = False
+                chunk.output = ''
+                chunk.vtexts = {}
+                self.outputManager.update(chunk)
+
+        # this happens when the last line in a buffer is empty and execRange
+        # contains only the last empty line
+        if not first:
+            return False
+
+        while not first.prevChunk.valid:
+            first = first.prevChunk
+
+        # run all chunks until the first chunk after selectedRange
+        idx = self.chunkList.index(first.chash)
+        for chash in self.chunkList[idx:]:
+            chunk = self.chunks[chash]
+            if chunk.lineRange.start > selectedRange.stop-1:
+                break
+            if not chunk.execute():
+                return False
+
+        return True
+
     def _getOrderedChunks(self):
         return [self.chunks[chash] for chash in self.chunkList]
 

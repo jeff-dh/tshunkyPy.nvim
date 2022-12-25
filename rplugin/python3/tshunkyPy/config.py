@@ -39,6 +39,7 @@ defaultConfig = {
                 'TshunkyPyRunAll'           : '<M-a>',
                 'TshunkyPyRunAllInvalid'    : '<M-i>',
                 'TshunkyPyRunFirstInvalid'  : '<M-f>',
+                'TshunkyPyRunRange'         : '<M-r>',
                 'TshunkyPyLive'             : '<M-x>',
                 'TshunkyPyShowStdout'       : '<M-o>',
                 'TshunkyPyQuit'             : '<M-q>'},

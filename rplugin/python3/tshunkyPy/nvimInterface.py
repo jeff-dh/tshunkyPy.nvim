@@ -47,6 +47,7 @@ class NvimInterface:
             if not keys:
                 continue
             keymap('n', keys, f':{cmd}<CR>', opts)
+            keymap('v', keys, f':{cmd}<CR>', opts)
             if config.enableInsertKeymaps:
                 keymap('i', keys, f'<ESC>:{cmd}<CR><right>i', opts)
 
@@ -195,6 +196,13 @@ class NvimInterface:
         self.update()
         with self.nlock:
             self.chunkManager.executeFirstInvalidChunk()
+
+    def runRange(self, selectedRange):
+        if len(selectedRange) > 1:
+            self.nvim.api.input('gv')
+        self.update()
+        with self.nlock:
+            self.chunkManager.executeRange(selectedRange)
 
     def showStdout(self):
         stdoutBuf = self.outputManager.stdoutBuffer
