@@ -26,12 +26,6 @@ class NvimInterface:
 
         self.nvim.api.command(f'lua vim.diagnostic.disable({self.buf.handle})')
 
-    def echo(self, x):
-        if not isinstance(x, str):
-            x = repr(x)
-        x = x.replace('\"', '\'')
-        self.nvim.out_write(x + '\n')
-
     def autocmd(self, events, cmd, group=None):
         if group == None:
             group = 'tshunkyPyAutoCmds' + self.ID
@@ -63,6 +57,8 @@ class NvimInterface:
                      'call TshunkyPyLiveCallback()')
 
     def quit(self):
+        self.outputManager.echo('tshunkyPy quit....')
+
         clear_autocmds = self.nvim.api.clear_autocmds
         command = self.nvim.api.command
 
@@ -81,8 +77,6 @@ class NvimInterface:
         if self.popupBuffer:
             command(f'bw {self.popupBuffer.handle}')
             self.popupBuffer = None
-
-        self.echo('tshunkyPy quit....')
 
     def cursorMoved(self):
         self.nvim.api.clear_autocmds(
@@ -166,9 +160,9 @@ class NvimInterface:
     def live(self):
         self.liveMode =  not self.liveMode
         if self.liveMode:
-            self.echo('tshunkyPy live mode is enabled')
+            self.outputManager.echo('tshunkyPy live mode is enabled')
         else:
-            self.echo('tshunkyPy live mode is disabled')
+            self.outputManager.echo('tshunkyPy live mode is disabled')
 
     def update(self):
         with self.nlock:

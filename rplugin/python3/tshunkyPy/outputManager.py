@@ -90,6 +90,12 @@ class OutputManager:
             createBuffer(self.nvim, False, buftype='nofile',
                          name = self.buf.name + '.tshunkyPy.stdout')
 
+    def echo(self, x):
+        if not isinstance(x, str):
+            x = repr(x)
+        x = x.replace('\"', '\'')
+        self.nvim.out_write(x + '\n')
+
     def deleteHandler(self, chash):
         if not chash in self.chunkSignHandlers.keys():
             return
