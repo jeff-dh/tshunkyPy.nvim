@@ -120,20 +120,26 @@ class ChunkManager(object):
         # find first chunk that overlapps with range and set all following
         # chukns invalid
         first = None
+        last = None
         for chunk in self._getOrderedChunks():
             if not first and selectedRange.start < chunk.lineRange.stop:
                 first = chunk
 
             if first and chunk.valid:
                 chunk.valid = False
-                chunk.output = ''
+                chunk.stdout = None
                 chunk.vtexts = {}
                 self.outputManager.update(chunk)
+            last = chunk
 
         # this happens when the last line in a buffer is empty and execRange
         # contains only the last empty line
         if not first:
-            return False
+            assert last
+            if not last.valid:
+                first = last
+            else:
+                return False
 
         while not first.prevChunk.valid:
             first = first.prevChunk
