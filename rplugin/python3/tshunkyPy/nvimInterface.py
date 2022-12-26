@@ -59,20 +59,25 @@ class NvimInterface:
         self.autocmd(['CursorHold', 'CursorHoldI'],
                      'call TshunkyPyCursorHoldCallback()')
 
-        self.updateAutoCommands()
+        self.autocmd(config.liveTriggerEvents,
+                     'call TshunkyPyLiveCallback()')
 
     def quit(self):
         clear_autocmds = self.nvim.api.clear_autocmds
         command = self.nvim.api.command
 
+        # delete autocmds
         clear_autocmds({'group': 'tshunkyPyAutoCursorMovedCmd' + self.ID})
         clear_autocmds({'group': 'tshunkyPyAutoCmds' + self.ID})
         clear_autocmds({'group': 'tshunkyPyAutoLiveCmd' + self.ID})
 
+        # enable diagnostics
         command(f'lua vim.diagnostic.enable({self.buf.handle})')
 
+        # cleanup output
         self.outputManager.quit()
 
+        # delete buffer
         if self.popupBuffer:
             command(f'bw {self.popupBuffer.handle}')
             self.popupBuffer = None
@@ -152,32 +157,18 @@ class NvimInterface:
             except NvimError:
                 pass
 
-    def updateAutoCommands(self):
-        if self.liveMode:
-            self.echo('tshunkyPy live mode is enabled')
-
-            self.nvim.api.clear_autocmds(
-                    {'group': 'tshunkyPyAutoLiveCmd' + self.ID})
-
-            self.autocmd(config.liveTriggerEvents,
-                         config.liveCommand,
-                         'tshunkyPyAutoLiveCmd' + self.ID)
-
-            self.runAllInvalid()
-        else:
-            self.echo('tshunkyPy live mode is disabled')
-
-            self.nvim.api.clear_autocmds(
-                    {'group': 'tshunkyPyAutoLiveCmd' + self.ID})
-
-            if config.semiLiveCommand:
-                self.autocmd(config.liveTriggerEvents,
-                             config.semiLiveCommand,
-                            'tshunkyPyAutoLiveCmd' + self.ID)
+    def liveCallback(self):
+        if self.liveMode and config.liveCommand:
+            self.nvim.api.command(config.liveCommand)
+        elif not self.liveMode and config.semiLiveCommand:
+            self.nvim.api.command(config.semiLiveCommand)
 
     def live(self):
         self.liveMode =  not self.liveMode
-        self.updateAutoCommands()
+        if self.liveMode:
+            self.echo('tshunkyPy live mode is enabled')
+        else:
+            self.echo('tshunkyPy live mode is disabled')
 
     def update(self):
         with self.nlock:
