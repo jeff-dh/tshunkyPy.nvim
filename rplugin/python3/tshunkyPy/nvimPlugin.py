@@ -62,14 +62,20 @@ class NvimPlugin:
         self.getInterface().showStdout()
 
     @pynvim.function('TshunkyPyLiveCallback', sync=False)
-    def liveCallback(self, _):
-        self.getInterface().liveCallback()
+    def liveCallback(self, args):
+        assert len(args) == 1
+        bufID = int(args[0])
+        self.nvimInterfaces[bufID].liveCallback()
 
     @pynvim.function('TshunkyPyCursorMovedCallback', sync=False)
-    def cursorMoved(self, _):
-        self.getInterface().cursorMoved()
+    def cursorMoved(self, args):
+        assert len(args) == 1
+        bufID = int(args[0])
+        self.nvimInterfaces[bufID].cursorMoved()
 
     @pynvim.function('TshunkyPyCursorHoldCallback', sync=False)
-    def cursorHold(self, _):
-        self.getInterface().cursorHold()
+    def cursorHold(self, args):
+        assert len(args) == 1
+        bufID = int(args[0])
+        self.nvimInterfaces[bufID].cursorHold()
 

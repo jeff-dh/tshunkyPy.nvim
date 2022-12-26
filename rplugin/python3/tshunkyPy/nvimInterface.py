@@ -26,12 +26,11 @@ class NvimInterface:
 
         self.nvim.api.command(f'lua vim.diagnostic.disable({self.buf.handle})')
 
-    def autocmd(self, events, cmd, group=None):
-        if group == None:
-            group = 'tshunkyPyAutoCmds' + self.ID
-        self.nvim.api.create_autocmd(events, {'group': group,
-                                              'buffer': self.buf.handle,
-                                              'command': cmd})
+    def autocmd(self, events, cmd):
+        self.nvim.api.create_autocmd(events,
+                                     {'group': 'tshunkyPyAutoCmds' + self.ID,
+                                      'buffer': self.buf.handle,
+                                      'command': cmd})
 
     def setKeymaps(self):
         keymap = self.buf.api.set_keymap
@@ -43,18 +42,17 @@ class NvimInterface:
             keymap('n', keys, f':{cmd}<CR>', opts)
             keymap('v', keys, f':{cmd}<CR>', opts)
             if config.enableInsertKeymaps:
-                keymap('i', keys, f'<ESC>:{cmd}<CR><right>i', opts)
+                keymap('i', keys, f'<ESC>:{cmd}<CR>a', opts)
 
         create_augroup = self.nvim.api.create_augroup
         create_augroup("tshunkyPyAutoCmds" + self.ID, {'clear': True})
-        create_augroup("tshunkyPyAutoLiveCmd" + self.ID, {'clear': True})
-        create_augroup("tshunkyPyAutoCursorMovedCmd" + self.ID, {'clear': True})
 
+        self.autocmd(['CursorMoved', 'CursorMovedI'],
+                     f'call TshunkyPyCursorMovedCallback({self.ID})')
         self.autocmd(['CursorHold', 'CursorHoldI'],
-                     'call TshunkyPyCursorHoldCallback()')
-
+                     f'call TshunkyPyCursorHoldCallback({self.ID})')
         self.autocmd(config.liveTriggerEvents,
-                     'call TshunkyPyLiveCallback()')
+                     f'call TshunkyPyLiveCallback({self.ID})')
 
     def quit(self):
         self.outputManager.echo('tshunkyPy quit....')
@@ -63,9 +61,7 @@ class NvimInterface:
         command = self.nvim.api.command
 
         # delete autocmds
-        clear_autocmds({'group': 'tshunkyPyAutoCursorMovedCmd' + self.ID})
         clear_autocmds({'group': 'tshunkyPyAutoCmds' + self.ID})
-        clear_autocmds({'group': 'tshunkyPyAutoLiveCmd' + self.ID})
 
         # enable diagnostics
         command(f'lua vim.diagnostic.enable({self.buf.handle})')
@@ -79,12 +75,6 @@ class NvimInterface:
             self.popupBuffer = None
 
     def cursorMoved(self):
-        self.nvim.api.clear_autocmds(
-                {'group': 'tshunkyPyAutoCursorMovedCmd' + self.ID})
-
-        # assert self.popupBuffer
-        # this might happen if the popup box is open
-        # and the open buffer changes
         if not self.popupBuffer:
             return
 
@@ -101,8 +91,7 @@ class NvimInterface:
                 pass
 
     def cursorHold(self):
-
-        # get stdout of "selected" chunk and prepare it
+        # get vtexts and stdout of "selected" chunk and prepare it
         lineno, col = self.nvim.funcs.getpos('.')[1:-1]
         chunk = self.chunkManager._getChunkByLine(lineno)
         if not chunk:
@@ -141,9 +130,6 @@ class NvimInterface:
         #create / update window
         winid = self.nvim.funcs.bufwinid(self.popupBuffer.handle)
         if winid == -1:
-            self.autocmd(['CursorMoved', 'CursorMovedI'],
-                         'call TshunkyPyCursorMovedCallback()',
-                         'tshunkyPyAutoCursorMovedCmd' + self.ID)
             self.nvim.api.open_win(self.popupBuffer, False, opts)
         else:
             try:
