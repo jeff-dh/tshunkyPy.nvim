@@ -5,9 +5,10 @@ from pynvim import Nvim
 
 
 class ChunkOutputHandler:
-    def  __init__(self, chash, buf, nvim: Nvim):
+    def  __init__(self, chash, buf, nvim: Nvim, vtextPos='eol'):
         self.nvim = nvim
         self.buf = buf
+        self.vtextPos = vtextPos
 
         self.id = str(chash)
 
@@ -44,18 +45,20 @@ class ChunkOutputHandler:
                 self._placeSign('tshunkyPyInvalidLine', lineno)
 
         # display the virtal text messages from vtexts
-        for lno, text in vtexts.items():
-            s = text.replace('\n', '\\n')
-            vtext = [f'{config.vtextPrompt} ' + s, 'tshunkyPyVTextHl']
-            mark = {'virt_text': [vtext], 'priority': config.vtextPriority}
-            self.buf.api.set_extmark(self.vtext_ns, lno-1, 0, mark)
+        for lno, textList in vtexts.items():
+            for text in reversed(textList):
+                s = text.replace('\n', '\\n')
+                vtext = [f'{config.vtextPrompt} ' + s, 'tshunkyPyVTextHl']
+                mark = {'virt_text': [vtext],
+                        'priority': config.vtextPriority,
+                        'virt_text_pos': self.vtextPos}
+                self.buf.api.set_extmark(self.vtext_ns, lno-1, 0, mark)
 
         if stdout:
             s = stdout.rstrip('\n').replace('\n', '\\n')
             vtext = [f'{config.vtextPrompt} ' + s, 'tshunkyPyVTextStdoutHl']
             mark = {'virt_text': [vtext], 'priority': config.vtextPriority + 1}
             self.buf.api.set_extmark(self.vtext_ns, lineRange.stop-2, 0, mark)
-
 
 
 class OutputManager:
@@ -139,9 +142,9 @@ class OutputManager:
 
         if not shash in self.chunkSignHandlers.keys():
             self.chunkSignHandlers[shash] = \
-                    ChunkOutputHandler(shash, self.buf, self.nvim)
+                    ChunkOutputHandler(shash, self.buf, self.nvim, 'right_align')
 
         handler = self.chunkSignHandlers[shash]
 
         handler.update(False, range(e.lineno, e.lineno + 1),
-                       {e.lineno: repr(e)}, '')
+                       {e.lineno: ['SyntaxError']}, '')

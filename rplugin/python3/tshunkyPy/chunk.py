@@ -7,6 +7,7 @@ import dill
 import types
 import inspect
 import traceback
+import pprint
 
 class StateWrapper(dict):
     def __init__(self):
@@ -90,8 +91,9 @@ class Chunk(object):
                 return
             caller = inspect.getframeinfo(inspect.stack()[1][0])
             if not isinstance(x, str):
-                x = repr(x)
-            printOutputs[caller.lineno] = x
+                x = pprint.pformat(x)
+            printOutputs[caller.lineno] = printOutputs.get(caller.lineno, [])
+            printOutputs[caller.lineno].append(x)
 
         self.namespace['printExpr'] = printExprWrapper
 
@@ -116,7 +118,8 @@ class Chunk(object):
         self.vtexts = dict(printOutputs)
         if error:
             self.stdout = self.stdout + '\n' + error[1]
-            self.vtexts[error[0]] = error[1]
+            self.vtexts[error[0]] = self.vtexts.get(error[0], [])
+            self.vtexts[error[0]].append(error[1])
 
         # unload modules that are not imported in the outside world
         # (outside of the exec envinronment) this is necessary to

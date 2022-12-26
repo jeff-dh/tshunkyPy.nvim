@@ -111,7 +111,7 @@ class NvimInterface:
 
         lines = [l for chunk in self.chunkManager._getOrderedChunks()
                    if lineno in chunk.vtexts.keys()
-                   for l in chunk.vtexts[lineno].split('\n')]
+                   for l in '\n'.join(chunk.vtexts[lineno]).split('\n')]
 
         if chunk.stdout:
             lines.extend(chunk.stdout.rstrip('\n').split('\n'))
@@ -147,7 +147,10 @@ class NvimInterface:
                          'tshunkyPyAutoCursorMovedCmd' + self.ID)
             self.nvim.api.open_win(self.popupBuffer, False, opts)
         else:
-            self.nvim.api.win_set_config(winid, opts)
+            try:
+                self.nvim.api.win_set_config(winid, opts)
+            except NvimError:
+                pass
 
     def updateAutoCommands(self):
         if self.liveMode:
