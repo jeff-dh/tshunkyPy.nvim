@@ -1,81 +1,86 @@
 from .nvimInterface import NvimInterface
 from .config import config
+from .utils.nvimUtils import NvimLock
 
-import pynvim
+from pynvim import Nvim, plugin, command, function
 
 
-@pynvim.plugin
+@plugin
 class NvimPlugin:
     synced = False
 
-    def __init__(self, nvim: pynvim.Nvim):
+    def __init__(self, nvim: Nvim):
         self.nvimInterfaces = {}
         self.nvim = nvim
+
+        self.lock = NvimLock(self.nvim)
 
         luaConfig = self.nvim.exec_lua('return require("tshunkyPy").getConfig()')
         if luaConfig:
             config.update(luaConfig)
 
     def getInterface(self):
-        bufId = self.nvim.current.buffer.handle
-        if bufId not in self.nvimInterfaces.keys():
-            self.nvimInterfaces[bufId] = NvimInterface(self.nvim)
-        return self.nvimInterfaces[bufId]
+        with self.lock:
+            bufId = self.nvim.current.buffer.handle
+            if bufId not in self.nvimInterfaces.keys():
+                self.nvimInterfaces[bufId] = NvimInterface(self.nvim)
+            return self.nvimInterfaces[bufId]
 
-    @pynvim.command('TshunkyPy', sync=synced)
+    @command('TshunkyPy', sync=synced)
     def init(self):
         self.getInterface()
         self.update()
 
-    @pynvim.command('TshunkyPyQuit', sync=synced)
+    @command('TshunkyPyQuit', sync=synced)
     def quit(self):
         bufId = self.nvim.current.buffer.handle
         self.getInterface().quit()
         del self.nvimInterfaces[bufId]
 
-    @pynvim.command('TshunkyPyLive', sync=synced)
+    @command('TshunkyPyLive', sync=synced)
     def live(self):
         self.getInterface().live()
 
-    @pynvim.command('TshunkyPyUpdate', sync=synced)
+    @command('TshunkyPyUpdate', sync=synced)
     def update(self):
         self.getInterface().update()
 
-    @pynvim.command('TshunkyPyRunAll', sync=synced)
+    @command('TshunkyPyRunAll', sync=synced)
     def runAll(self):
         self.getInterface().runAll()
 
-    @pynvim.command('TshunkyPyRunAllInvalid', sync=synced)
+    @command('TshunkyPyRunAllInvalid', sync=synced)
     def runAllInvalid(self):
         self.getInterface().runAllInvalid()
 
-    @pynvim.command('TshunkyPyRunFirstInvalid', sync=synced)
+    @command('TshunkyPyRunFirstInvalid', sync=synced)
     def runFirstInvalid(self):
         self.getInterface().runFirstInvalid()
 
-    @pynvim.command('TshunkyPyRunRange', range='', sync=synced)
+    @command('TshunkyPyRunRange', range='', sync=synced)
     def runRange(self, srange):
         self.getInterface().runRange(range(srange[0], srange[1]+1))
 
-    @pynvim.command('TshunkyPyShowStdout', sync=synced)
+    @command('TshunkyPyShowStdout', sync=synced)
     def showStdout(self):
         self.getInterface().showStdout()
 
-    @pynvim.function('TshunkyPyLiveCallback', sync=False)
+    def getInterfaceFromArgs(self, args):
+        assert len(args) == 1
+        bufID = int(args[0])
+        assert bufID
+        assert bufID in self.nvimInterfaces.keys()
+        return self.nvimInterfaces[bufID]
+
+    @function('TshunkyPyLiveCallback', sync=False)
     def liveCallback(self, args):
-        assert len(args) == 1
-        bufID = int(args[0])
-        self.nvimInterfaces[bufID].liveCallback()
+        self.getInterfaceFromArgs(args).liveCallback()
 
-    @pynvim.function('TshunkyPyCursorMovedCallback', sync=False)
+    @function('TshunkyPyCursorMovedCallback', sync=False)
     def cursorMoved(self, args):
-        assert len(args) == 1
-        bufID = int(args[0])
-        self.nvimInterfaces[bufID].cursorMoved()
+        self.getInterfaceFromArgs(args).cursorMoved()
 
-    @pynvim.function('TshunkyPyCursorHoldCallback', sync=False)
+    @function('TshunkyPyCursorHoldCallback', sync=False)
     def cursorHold(self, args):
-        assert len(args) == 1
-        bufID = int(args[0])
-        self.nvimInterfaces[bufID].cursorHold()
+        self.getInterfaceFromArgs(args).cursorHold()
 
