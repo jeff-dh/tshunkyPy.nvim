@@ -10,7 +10,7 @@ import traceback
 import pprint
 import copy
 
-class StateWrapper(dict):
+class GlobalsWrapper(dict):
     def __init__(self):
         super().__init__()
         self.data = None
@@ -27,10 +27,9 @@ class StateWrapper(dict):
         return self.data.__setitem__(key, value)
 
 class Chunk(object):
-    def __init__(self, chash, node, sourceChunk, filename, prevChunk,
+    def __init__(self, node, sourceChunk, filename, prevChunk,
                  outputManager=None):
 
-        self.chash = chash
         self.sourceChunk = sourceChunk
         self.prevChunk = prevChunk
         self.outputManager = outputManager
@@ -38,36 +37,43 @@ class Chunk(object):
         self.node = node
         self.codeObject = None
 
-        if node:
-            self.lineRange = range(node.lineno, node.end_lineno + 1)
-        else:
-            assert isinstance(self, DummyInitialChunk)
-
-
         # all chunks -- of the same "execution chain" / ChunkManager -- share
         # the same globalState. Only for the DummyInitialChunk
         # (-> prevChunk is None) a new StateWrapper is created -- and shared
         # with all other chunks
         self.globalState = prevChunk.globalState if prevChunk \
-                                                 else StateWrapper()
+                                                 else GlobalsWrapper()
         self.namespace = None
 
-        self.valid = False
-        self.stdout = None
-        self.vtexts = {}
+        # defines valid, stdout and vtexts
+        self.reset()
 
+    def reset(self):
+        self._valid, self.stdout, self.vtexts = False, None, {}
         if self.outputManager:
             self.outputManager.update(self)
 
+    @property
+    def valid(self):
+        return self._valid
+
+    @property
+    def lineRange(self):
+        assert self.node
+        return range(self.node.lineno, self.node.end_lineno + 1)
+
     def update(self, node):
-        self.lineRange = range(node.lineno, node.end_lineno+1)
         self.node = node
+
+    def cleanup(self):
+        assert self.outputManager
+        self.outputManager.delete(self)
 
     def execute(self):
         logging.debug('exec %s', self.getDebugId())
 
         assert self.prevChunk
-        assert self.prevChunk.valid
+        assert self.prevChunk._valid
 
         # compile code if it's the first time we execute this chunk'
         if not self.codeObject or not config.reuseCodeObjects:
@@ -123,7 +129,7 @@ class Chunk(object):
         self.stdout = stdoutBuffer.getvalue()
         self.vtexts = dict(printOutputs)
         if error:
-            self.stdout = self.stdout + '\n' + error[1]
+            self.stdout += '\n' + error[1]
             self.vtexts[error[0]] = self.vtexts.get(error[0], [])
             self.vtexts[error[0]].append(error[1])
 
@@ -141,19 +147,19 @@ class Chunk(object):
         for m in (afterModules - beforeModules):
             del sys.modules[m]
 
-        self.valid = error == None
+        self._valid = error == None
 
         assert self.outputManager
         self.outputManager.update(self)
 
-        return self.valid
+        return self._valid
 
     def getDebugId(self):
         return f'{self.lineRange.start}: {self.sourceChunk.splitlines()[0]}'
 
 class DummyInitialChunk(Chunk):
     def __init__(self, initialNamespace):
-        super().__init__(0, None, None, None, None)
+        super().__init__(None, None, None, None)
         self.namespace = initialNamespace
-        self.valid = True
+        self._valid = True
 

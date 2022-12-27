@@ -50,11 +50,12 @@ class ChunkManager(object):
         #reset chunkList
         self.chunkList = []
         prevChunk = DummyInitialChunk({})
+        prevChash = 0
 
         for n in module_ast.body:
             # calculate chunk hash
             sourceChunk = ast.get_source_segment(source, n)
-            chash = f'{prevChunk.chash}{sourceChunk}'.__hash__()
+            chash = f'{prevChash}{sourceChunk}'.__hash__()
 
             self.chunkList.append(chash)
 
@@ -67,14 +68,15 @@ class ChunkManager(object):
             else:
                 # chunk or a predecessor changed
                 # create new chunk
-                chunk = Chunk(chash, n, sourceChunk, filename,
-                              prevChunk, self.outputManager)
+                chunk = Chunk(n, sourceChunk, filename, prevChunk,
+                              self.outputManager)
                 self.chunks[chash] = chunk
                 changed = True
 
                 logging.debug('changed %s', self.chunks[chash].getDebugId())
 
             prevChunk = chunk
+            prevChash = chash
 
         return self._cleanUpCache() or changed
 
@@ -84,10 +86,7 @@ class ChunkManager(object):
         orderedChunks = self._getOrderedChunks()
         for chunk in orderedChunks:
             if chunk.valid:
-                chunk.valid = False
-                chunk.stdout = None
-                chunk.vtexts = {}
-                self.outputManager.update(chunk)
+                chunk.reset()
 
         for chunk in self._getOrderedChunks():
             if not chunk.execute():
@@ -121,15 +120,13 @@ class ChunkManager(object):
         # chukns invalid
         first = None
         last = None
-        for chunk in self._getOrderedChunks():
+        orderedChunks = self._getOrderedChunks()
+        for chunk in orderedChunks:
             if not first and selectedRange.start < chunk.lineRange.stop:
                 first = chunk
 
             if first and chunk.valid:
-                chunk.valid = False
-                chunk.stdout = None
-                chunk.vtexts = {}
-                self.outputManager.update(chunk)
+                chunk.reset()
             last = chunk
 
         # this happens when the last line in a buffer is empty and execRange
@@ -145,9 +142,8 @@ class ChunkManager(object):
             first = first.prevChunk
 
         # run all chunks until the first chunk after selectedRange
-        idx = self.chunkList.index(first.chash)
-        for chash in self.chunkList[idx:]:
-            chunk = self.chunks[chash]
+        idx = orderedChunks.index(first)
+        for chunk in orderedChunks[idx:]:
             if chunk.lineRange.start > selectedRange.stop-1:
                 break
             if not chunk.execute():
@@ -174,7 +170,7 @@ class ChunkManager(object):
 
             assert chash not in self.chunkList
 
-            self.outputManager.deleteHandler(chash)
+            self.chunks[chash].cleanup()
             del self.chunks[chash]
 
         assert len(self.chunks) == len(self.chunkList)

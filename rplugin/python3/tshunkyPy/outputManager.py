@@ -2,15 +2,16 @@ from .utils.nvimUtils import modifiable, createBuffer
 from .config import config
 
 from pynvim import Nvim
+from pprint import pformat
 
 
 class ChunkOutputHandler:
-    def  __init__(self, chash, buf, nvim: Nvim, vtextPos='eol'):
+    def  __init__(self, cid, buf, nvim: Nvim, vtextPos='eol'):
         self.nvim = nvim
         self.buf = buf
         self.vtextPos = vtextPos
 
-        self.id = str(chash)
+        self.id = str(cid)
 
         self.vtext_ns = self.nvim.api.create_namespace(
                                     f'tshunkyPyVirtualText{self.id}')
@@ -54,6 +55,7 @@ class ChunkOutputHandler:
                         'virt_text_pos': self.vtextPos}
                 self.buf.api.set_extmark(self.vtext_ns, lno-1, 0, mark)
 
+        # display virtual text messages from stdout
         if stdout:
             s = stdout.rstrip('\n').replace('\n', '\\n')
             vtext = [f'{config.vtextPrompt} ' + s, 'tshunkyPyVTextStdoutHl']
@@ -63,9 +65,9 @@ class ChunkOutputHandler:
 
 class OutputManager:
 
-    def __init__(self, buf, nvim):
+    def __init__(self, nvim):
         self.nvim = nvim
-        self.buf = buf
+        self.buf = self.nvim.current.buffer
         self.chunkSignHandlers = {}
 
         command = self.nvim.api.command
@@ -92,16 +94,18 @@ class OutputManager:
 
     def echo(self, x):
         if not isinstance(x, str):
-            x = repr(x)
+            x = pformat(x)
+        assert x
         x = x.replace('\"', '\'')
         self.nvim.out_write(x + '\n')
 
-    def deleteHandler(self, chash):
-        if not chash in self.chunkSignHandlers.keys():
+    def delete(self, chunk):
+        cid = id(chunk)
+        if not cid in self.chunkSignHandlers.keys():
             return
 
-        self.chunkSignHandlers[chash].cleanup()
-        del self.chunkSignHandlers[chash]
+        self.chunkSignHandlers[cid].cleanup()
+        del self.chunkSignHandlers[cid]
 
     def quit(self):
         for handler in self.chunkSignHandlers.values():
@@ -113,13 +117,14 @@ class OutputManager:
         self.stdoutBuffer = None
 
     def update(self, chunk):
+        cid = id(chunk)
         # create handler if neccessary
-        if not chunk.chash in self.chunkSignHandlers.keys():
-            self.chunkSignHandlers[chunk.chash] = \
-                    ChunkOutputHandler(chunk.chash, self.buf, self.nvim)
+        if not cid in self.chunkSignHandlers.keys():
+            self.chunkSignHandlers[cid] = \
+                    ChunkOutputHandler(cid, self.buf, self.nvim)
 
         # call handler.update
-        handler = self.chunkSignHandlers[chunk.chash]
+        handler = self.chunkSignHandlers[cid]
         handler.update(chunk.valid, chunk.lineRange, chunk.vtexts, chunk.stdout)
 
         # collect stdout and set stdoutBuffer
@@ -136,14 +141,16 @@ class OutputManager:
             assert self.stdoutBuffer
             stdoutList.reverse()
 
+            title = ['TshunkyPy.stdout:',
+                     '-----------------']
             with modifiable(self.stdoutBuffer):
-                self.stdoutBuffer[:] = stdoutList
+                self.stdoutBuffer[:] = title  + stdoutList
 
     def setSyntaxError(self, e):
         shash = 'SyntaxError'.__hash__()
 
         if not e:
-            self.deleteHandler(shash)
+            self.delete(shash)
             return
 
         if not shash in self.chunkSignHandlers.keys():

@@ -6,6 +6,7 @@ from .config import config
 from pynvim import Nvim
 from pynvim.api.common import NvimError
 from textwrap import wrap
+from contextlib import suppress
 
 class NvimInterface:
 
@@ -15,10 +16,10 @@ class NvimInterface:
         self.buf = self.nvim.current.buffer
         self.ID = str(self.buf.handle)
 
-        self.outputManager = OutputManager(self.buf, self.nvim)
+        self.outputManager = OutputManager(self.nvim)
         self.chunkManager = ChunkManager(self.outputManager)
-        self.liveMode = False
 
+        self.liveMode = False
         self.popupBuffer = None
         self.nlock = NvimLock(nvim)
 
@@ -85,10 +86,8 @@ class NvimInterface:
             # popup was focused and the cursor leaves the popup
             # it throws an winid invalid exception....?!?!
             # anyway it closes the window
-            try:
+            with suppress(NvimError):
                 self.nvim.api.win_close(winid, True)
-            except NvimError:
-                pass
 
     def cursorHold(self):
         # get vtexts and stdout of "selected" chunk and prepare it
@@ -132,10 +131,8 @@ class NvimInterface:
         if winid == -1:
             self.nvim.api.open_win(self.popupBuffer, False, opts)
         else:
-            try:
+            with suppress(NvimError):
                 self.nvim.api.win_set_config(winid, opts)
-            except NvimError:
-                pass
 
     def liveCallback(self):
         if self.liveMode and config.liveCommand:
@@ -147,35 +144,39 @@ class NvimInterface:
         self.liveMode =  not self.liveMode
         if self.liveMode:
             self.outputManager.echo('tshunkyPy live mode is enabled')
+            self.liveCallback()
         else:
             self.outputManager.echo('tshunkyPy live mode is disabled')
 
+    def _update_raw(self):
+        source = '\n'.join(self.buf[:])
+        return self.chunkManager.update(source, self.buf.name)
+
     def update(self):
         with self.nlock:
-            source = '\n'.join(self.buf[:])
-
-            return self.chunkManager.update(source, self.buf.name)
+            self._update_raw()
 
     def runAll(self):
-        self.update()
         with self.nlock:
+            self._update_raw()
             self.chunkManager.executeAllChunks()
 
     def runAllInvalid(self):
-        self.update()
         with self.nlock:
+            self._update_raw()
             self.chunkManager.executeAllInvalidChunks()
 
     def runFirstInvalid(self):
-        self.update()
         with self.nlock:
+            self._update_raw()
             self.chunkManager.executeFirstInvalidChunk()
 
     def runRange(self, selectedRange):
+        # keep visual selection
         if len(selectedRange) > 1:
             self.nvim.api.input('gv')
-        self.update()
         with self.nlock:
+            self._update_raw()
             self.chunkManager.executeRange(selectedRange)
 
     def showStdout(self):
