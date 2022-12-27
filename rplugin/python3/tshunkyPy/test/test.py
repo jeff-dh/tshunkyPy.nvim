@@ -16,7 +16,7 @@ class OutputManager:
         ts = [f'{file.name}:{lno} {t}' for lno, t in chunk.vtexts]
         print('\n'.join(ts))
 
-    def deleteHandler(self, chash):
+    def delete(self, chunk):
         pass
 
     def setSyntaxError(self, e):
