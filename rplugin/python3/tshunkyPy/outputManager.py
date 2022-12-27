@@ -99,8 +99,11 @@ class OutputManager:
         x = x.replace('\"', '\'')
         self.nvim.out_write(x + '\n')
 
-    def delete(self, chunk):
-        cid = id(chunk)
+    def delete(self, chunk=None, cid=None):
+        assert (chunk == None) != (cid == None)
+
+        if not cid:
+            cid = id(chunk)
         if not cid in self.chunkSignHandlers.keys():
             return
 
@@ -150,7 +153,7 @@ class OutputManager:
         shash = 'SyntaxError'.__hash__()
 
         if not e:
-            self.delete(shash)
+            self.delete(cid=shash)
             return
 
         if not shash in self.chunkSignHandlers.keys():
