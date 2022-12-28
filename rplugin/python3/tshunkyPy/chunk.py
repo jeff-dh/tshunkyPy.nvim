@@ -9,6 +9,7 @@ import inspect
 import traceback
 import pprint
 import copy
+from pathlib import Path
 
 class GlobalsWrapper(dict):
     def __init__(self):
@@ -123,8 +124,12 @@ class Chunk(object):
                 exec(self.codeObject, self.globalState)
             except Exception:
                 _, _, tb = sys.exc_info()
-                error = (traceback.extract_tb(tb)[-1][1],
-                         traceback.format_exc())
+                tb = traceback.extract_tb(tb)[-1]
+                if Path(tb.filename).absolute() == Path(self.filename).absolute():
+                    ln = tb[1]
+                else:
+                    ln = self.lineRange.stop - 1
+                error = (ln, traceback.format_exc())
 
         self.stdout = stdoutBuffer.getvalue()
         self.vtexts = dict(printOutputs)
