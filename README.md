@@ -1,5 +1,47 @@
 # tshunkyPy
-A neovim plugin that runs python code right after you typed it
+
+tshunkyPy is an experimental neovim code runner plugin. It sits right in
+the middle of the two major clusters of available code runner plugins, as it
+runs code in the correct context while avoiding to rerun the whole code all the
+time.
+
+## Why yet another code runner plugin?
+
+I was looking for a (python) code runner plugin to be able to run and test
+pieces of code and prototyp stuff on the fly.
+
+As far as I know, the neovim code runner plugins available categorize in two
+major branches both with their drawbacks.
+
+On the one hand Codi, LuaPad,... rerun the entire code (buffer, file,...)
+everytime an update event is triggerd. On the other hand vim-slime,
+SnipRun,... send 'selected parts' of the code to an interpreter session and
+disregards the context of the code (buffer, file,...).
+
+tshunkyPy tries to fill the gap right in the middle. It considers the code
+(buffer, file,...) in its entirety, while executing it in chunks (top level
+statements). Furthermore it keeps track of dependencies of the chunks to one
+another and only reruns chunks if the chunk itself or a chunk it depends on
+(all the chunks 'above') changed. I.e. it makes sure that each chunk that is
+executed will be executed in the correct context (of the buffer, file,...)
+without rerunning it in it's entirety.
+
+To achieve this tshunkyPy saves and restores the execution state for each
+chunk. This is done -- broadly speaking -- by pickling `globals()`. As a result
+this causes some to the ability of tshunkyPy as it is only able to run code
+where the `globals()` (all variables and modules) are pickable. This means that
+e.g. you can't run code with tshunkyPy that uses file descriptors or tracebacks
+in the main code (neovim buffer). Furthermore libraries such as `matplotlib`
+and `subprocess` are not usable in the main code with tshunkyPy.
+
+## demo
+tshunkyPy in semi live mode (the TshunkyPy commands are map to keys be default, I manually typed them in the demo to show what's actually going on):
+
+![](https://raw.githubusercontent.com/jeff-dh/tshunkyPy.nvim/master/screenshots/semiLive.gif)
+
+tshunkyPy in live mode:
+
+![](https://raw.githubusercontent.com/jeff-dh/tshunkyPy.nvim/master/screenshots/live.gif)
 
 ## install
 
@@ -12,7 +54,7 @@ pip install dill
 install tshunkyPy with your package manager, for example with packer:
 
 ```lua
-use 'jeff-dh/tshunkyPy.nvim'
+use {'jeff-dh/tshunkyPy.nvim', run=':UpdateRemotePlugins'},
 ```
 
 
