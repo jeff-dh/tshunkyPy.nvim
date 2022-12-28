@@ -139,8 +139,9 @@ class NvimInterface:
             self.outputManager.echo('tshunkyPy live mode is disabled')
 
     def _update_raw(self):
+        filetype = self.buf.api.get_option('filetype')
         source = '\n'.join(self.buf[:])
-        return self.chunkManager.update(source, self.buf.name)
+        return self.chunkManager.update(source, filetype, self.buf.name)
 
     def update(self):
         with self.nlock:

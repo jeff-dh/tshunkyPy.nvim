@@ -1,20 +1,7 @@
-import ast
 import logging
 
-from .chunk import Chunk, DummyInitialChunk
-
-
-class ExprPrintWrapper(ast.NodeTransformer):
-    """Wraps all Expr-Statements in a call to print()"""
-    def visit_Expr(self, node):
-        new = ast.Expr(
-                value = ast.Call(
-                    func = ast.Name(id='printExpr', ctx=ast.Load()),
-                    args = [node.value], keywords = [])
-                )
-        ast.copy_location(new, node)
-        ast.fix_missing_locations(new)
-        return new
+from .chunk import DummyInitialChunk
+from . import backends
 
 
 class ChunkManager(object):
@@ -25,36 +12,28 @@ class ChunkManager(object):
 
         self.isRunable = False
 
-    def _parseSource(self, source):
-        try:
-            module_ast = ast.parse(source)
-        except SyntaxError as e:
-            self.isRunable = False
-            self.outputManager.setSyntaxError(e)
-            return None
-
-        self.outputManager.setSyntaxError(None)
-        self.isRunable = True
-
-        # wrap every expression statement into a print call
-        return ExprPrintWrapper().visit(module_ast)
-
-
-    def update(self, source, filename='<string>'):
+    def update(self, source, filetype, filename='<string>'):
         changed = False
 
-        module_ast = self._parseSource(source)
-        if not module_ast:
+        astChunks = backends.parse[filetype](source, filename)
+
+        if isinstance(astChunks, SyntaxError):
+            self.isRunable = False
+            self.outputManager.setSyntaxError(astChunks)
             return False
+
+        self.isRunable = True
+        self.outputManager.setSyntaxError(None)
 
         #reset chunkList
         self.chunkList = []
         prevChunk = DummyInitialChunk({})
         prevChash = 0
 
-        for n in module_ast.body:
+        FTChunk = backends.Chunk[filetype]
+        for astNode, sourceChunk in astChunks:
+            self.outputManager.echo(astNode)
             # calculate chunk hash
-            sourceChunk = ast.get_source_segment(source, n)
             chash = f'{prevChash}{sourceChunk}'.__hash__()
 
             self.chunkList.append(chash)
@@ -64,12 +43,12 @@ class ChunkManager(object):
                 # chunk (and it predecessors) did not change
                 # there might have been a whitespace change
                 chunk = self.chunks[chash]
-                chunk.update(n)
+                chunk.update(astNode)
             else:
                 # chunk or a predecessor changed
                 # create new chunk
-                chunk = Chunk(n, sourceChunk, filename, prevChunk,
-                              self.outputManager)
+                chunk = FTChunk(astNode, sourceChunk, filename, prevChunk,
+                                self.outputManager)
                 self.chunks[chash] = chunk
                 changed = True
 
