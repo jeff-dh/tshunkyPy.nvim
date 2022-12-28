@@ -1,8 +1,8 @@
 # tshunkyPy
 
 tshunkyPy is an experimental neovim code runner plugin. It sits right in
-the middle of the two major clusters of available code runner plugins, as it
-runs code in the correct context while avoiding to rerun the whole code all the
+the middle of the two major clusters of available code runner plugins. It runs
+code in the correct context while avoiding to rerun the whole code all the
 time.
 
 ## Why yet another code runner plugin?
@@ -16,7 +16,7 @@ major branches both with their drawbacks.
 On the one hand Codi, LuaPad,... rerun the entire code (buffer, file,...)
 everytime an update event is triggerd. On the other hand vim-slime,
 SnipRun,... send 'selected parts' of the code to an interpreter session and
-disregards the context of the code (buffer, file,...).
+disregard the context of the code (buffer, file,...).
 
 tshunkyPy tries to fill the gap right in the middle. It considers the code
 (buffer, file,...) in its entirety, while executing it in chunks (top level
@@ -28,14 +28,14 @@ without rerunning it in it's entirety.
 
 To achieve this tshunkyPy saves and restores the execution state for each
 chunk. This is done -- broadly speaking -- by pickling `globals()`. As a result
-this causes some to the ability of tshunkyPy as it is only able to run code
-where the `globals()` (all variables and modules) are pickable. This means that
-e.g. you can't run code with tshunkyPy that uses file descriptors or tracebacks
-in the main code (neovim buffer). Furthermore libraries such as `matplotlib`
-and `subprocess` are not usable in the main code with tshunkyPy.
+this causes some restrictions to the ability of tshunkyPy as it is only able to
+run code where the `globals()` ('variables and modules') are pickable. This
+means that can't run code with tshunkyPy that for example uses file descriptors
+or tracebacks in the main code (neovim buffer). Furthermore libraries such as
+`matplotlib` and `subprocess` are not usable in the main code with tshunkyPy.
 
 ## demo
-tshunkyPy in semi live mode (the TshunkyPy commands are map to keys be default, I manually typed them in the demo to show what's actually going on):
+tshunkyPy in semi live mode (the TshunkyPy commands are map to keys by default, I manually typed them in the demo to show what's actually going on):
 
 ![](https://raw.githubusercontent.com/jeff-dh/tshunkyPy.nvim/master/screenshots/semiLive.gif)
 
@@ -90,13 +90,11 @@ require('tshunkyPy').setup({
     --                       called while live mode is enabled
     -- semiLiveCommand:      the command to run when the live callback get
     --                       called while live mode is disabled
-    liveTriggerEvents     = {'TextChanged', 'TextChangedI'},
+    liveTriggerEvents     = {'CursorHold', 'CursorHoldI', 'TextChanged'},
+    liveTriggerKeysI      = {'<CR>', '<UP>', '<DOWN>'},
+    liveTriggerKeysN      = {'<CR>'},
     liveCommand           = 'TshunkyPyRunAllInvalid',
     semiLiveCommand       = 'TshunkyPyUpdate', --None to disable
-
-    -- alternate live command config
---  liveTriggerEvents     = ['CursorHold', 'CursorHoldI'],
---  liveCommand           = 'TshunkyPyRunAll',
 
     -- whether the key mapping should be mapped in insert mode
     enableInsertKeymaps   = true,
